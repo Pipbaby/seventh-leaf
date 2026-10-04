@@ -1,6 +1,9 @@
 # Seventh Leaf
 
 **A split-flap picture wall for your own photos, in the browser.**
+Source-available and free for non-commercial use.
+
+**▶ Try it now: <https://pipbaby.github.io/seventh-leaf/>**
 
 ![A wave of flipping leaves crossing the wall](docs/wave.jpg)
 
@@ -12,9 +15,10 @@ leaf, and only when the last cell lands does one complete image settle.
 
 Everything runs in your browser. Your photos, videos and music stay on your own computer.
 
-## Try it
+## Run it on your own computer
 
-You need a copy of this project and any simple local web server. There is no build step.
+The live demo above needs no installation. To run your own copy, you need the project files and
+any simple local web server. There is no build step.
 
 1. Download the project (**Code → Download ZIP** on GitHub) and unzip it.
 2. Open a terminal in the unzipped folder and run **one** of these:
@@ -103,7 +107,21 @@ tested; reports are very welcome.
 
 ## Licence
 
-[MIT](LICENSE) © 2026 Pipbaby. The demo pictures were generated for this project and are covered
-by the same licence. three.js is MIT-licensed by its authors (`vendor/three/LICENSE`).
+Seventh Leaf is **source-available and free for non-commercial use**, under the
+[PolyForm Noncommercial License 1.0.0](LICENSE). Copyright 2026 Pipbaby.
+
+- **You may** use, copy, change and share it for any non-commercial purpose: personal use,
+  hobby projects, study and research, and use by charities, schools and public institutions.
+- **You may not** use it for commercial purposes, such as selling it, including it in a paid
+  product or service, or using it to run a business. To ask about commercial use, contact Pipbaby
+  through GitHub.
+- When you share it, include the licence and its `Required Notice` line.
+
+Because it restricts commercial use, Seventh Leaf is not "open source" in the sense of the
+Open Source Definition. The demo pictures were generated for this project and are covered by the
+same licence.
+
+**Third-party code:** three.js is included in `vendor/three/` under its own MIT licence
+(`vendor/three/LICENSE`), which still applies to it.
 
 Built by Pipbaby with Claude.

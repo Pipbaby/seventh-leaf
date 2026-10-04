@@ -2,6 +2,12 @@
 
 Thank you for your interest! Bug reports, ideas and pull requests are all welcome.
 
+## Licence of contributions
+
+Seventh Leaf is free for non-commercial use under the PolyForm Noncommercial License 1.0.0 (see
+[LICENSE](LICENSE)). By contributing, you agree that your contribution is licensed under the same
+terms.
+
 ## Reporting a problem
 
 Open an issue and include:
@@ -12,7 +18,7 @@ Open an issue and include:
 
 ## Making a change
 
-1. Run the project locally (see **Try it** in the README). There is no build step: edit a file,
+1. Run the project locally (see **Run it on your own computer** in the README). There is no build step: edit a file,
    reload the page.
 2. Keep changes small and focused, one topic per pull request.
 3. Match the style of the surrounding code: plain modern JavaScript modules, short comments that
@@ -22,7 +28,7 @@ Open an issue and include:
 
 ## Pictures and sounds
 
-Only add pictures, sounds or music you have the right to share under the MIT licence: your own
-work, or work whose licence clearly allows it. Photos of other people's artwork, film stills and
+Only add pictures, sounds or music you have the right to share under the project's licence: your
+own work, or work whose licence clearly allows it. Photos of other people's artwork, film stills and
 commercial music cannot be included. The `local/` folder is ignored by git for exactly this
 reason.

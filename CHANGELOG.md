@@ -2,6 +2,10 @@
 
 ## 0.1.0 — first public version
 
+- Licensed under the PolyForm Noncommercial License 1.0.0: source-available and free for
+  non-commercial use. (The very first upload, on 5 October 2026, briefly carried the MIT licence;
+  this version replaces it.)
+
 - A 12 × 7 split-flap wall in 3D: each change flips every cell seven times, in a diagonal wave on a
   shared mechanical clock, with timing measured from a real installation.
 - A measured leaf motion (creep, hesitation at the stops, fall under gravity) and a pendulum swing
