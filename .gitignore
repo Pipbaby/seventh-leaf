@@ -1,0 +1,8 @@
+# Your private picture folder (see README) - never published
+local/
+_local*/
+
+# Operating system clutter
+.DS_Store
+Thumbs.db
+desktop.ini

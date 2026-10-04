@@ -1,0 +1,96 @@
+{
+ "name": "Seventh Leaf demo pictures (generated, free to use under the project licence)",
+ "items": [
+  {
+   "file": "pictures/dusk-hills.jpg",
+   "name": "Dusk over the hills",
+   "w": 2048,
+   "h": 1195,
+   "thumb": "thumbs/dusk-hills.jpg"
+  },
+  {
+   "file": "pictures/blueprint.jpg",
+   "name": "Blueprint",
+   "w": 2048,
+   "h": 1195,
+   "thumb": "thumbs/blueprint.jpg"
+  },
+  {
+   "file": "pictures/signal-stripes.jpg",
+   "name": "Signal stripes",
+   "w": 2048,
+   "h": 1195,
+   "thumb": "thumbs/signal-stripes.jpg"
+  },
+  {
+   "file": "pictures/tide-pool.jpg",
+   "name": "Tide pool",
+   "w": 2048,
+   "h": 1195,
+   "thumb": "thumbs/tide-pool.jpg"
+  },
+  {
+   "file": "pictures/still-life.jpg",
+   "name": "Still life",
+   "w": 2048,
+   "h": 1195,
+   "thumb": "thumbs/still-life.jpg"
+  },
+  {
+   "file": "pictures/aurora.jpg",
+   "name": "Aurora",
+   "w": 2048,
+   "h": 1195,
+   "thumb": "thumbs/aurora.jpg"
+  },
+  {
+   "file": "pictures/contours.jpg",
+   "name": "Contour map",
+   "w": 2048,
+   "h": 1195,
+   "thumb": "thumbs/contours.jpg"
+  },
+  {
+   "file": "pictures/night-city.jpg",
+   "name": "City at night",
+   "w": 2048,
+   "h": 1195,
+   "thumb": "thumbs/night-city.jpg"
+  },
+  {
+   "file": "pictures/colour-fields.jpg",
+   "name": "Colour fields",
+   "w": 2048,
+   "h": 1195,
+   "thumb": "thumbs/colour-fields.jpg"
+  },
+  {
+   "file": "pictures/lighthouse.jpg",
+   "name": "Lighthouse",
+   "w": 1200,
+   "h": 1800,
+   "thumb": "thumbs/lighthouse.jpg"
+  },
+  {
+   "file": "pictures/tall-window.jpg",
+   "name": "Tall window",
+   "w": 1200,
+   "h": 1800,
+   "thumb": "thumbs/tall-window.jpg"
+  },
+  {
+   "file": "pictures/birches.jpg",
+   "name": "Birches",
+   "w": 1200,
+   "h": 1800,
+   "thumb": "thumbs/birches.jpg"
+  },
+  {
+   "file": "pictures/leaf.jpg",
+   "name": "A leaf",
+   "w": 1200,
+   "h": 1800,
+   "thumb": "thumbs/leaf.jpg"
+  }
+ ]
+}

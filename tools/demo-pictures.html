@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Seventh Leaf — demo pictures</title>
+<!--
+  Draws the demo picture set that ships with Seventh Leaf. Every picture is generated here, so the
+  project owns them outright. Open this file in a browser to see them; right-click a picture to save
+  it. (The maintainers export them to demo/ with a small script.)
+-->
+<style>
+  body { margin: 0; padding: 24px; background: #1b1d21; color: #ddd; font: 14px system-ui, sans-serif; }
+  figure { display: inline-block; margin: 0 16px 24px 0; vertical-align: top; }
+  canvas { display: block; max-width: 480px; max-height: 480px; height: auto; width: auto; box-shadow: 0 4px 18px rgba(0,0,0,.5); }
+  figcaption { margin-top: 6px; color: #aaa; }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script>
+const L = [2048, 1195]; // the wall's shape (12 × 7)
+const P = [1200, 1800]; // portrait
+let seed = 1;
+const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+const lerp = (a, b, t) => a + (b - a) * t;
+
+const pictures = [
+  ['dusk-hills', 'Dusk over the hills', L, (g, W, H) => {
+    const s = g.createLinearGradient(0, 0, 0, H); s.addColorStop(0, '#1f2350'); s.addColorStop(0.5, '#a84a54'); s.addColorStop(0.78, '#e88c4f'); s.addColorStop(1, '#f6c46c');
+    g.fillStyle = s; g.fillRect(0, 0, W, H);
+    // a low, wide afterglow behind the hills; no sun disc
+    const glow = g.createRadialGradient(W * 0.62, H * 0.78, 40, W * 0.62, H * 0.78, 900); glow.addColorStop(0, 'rgba(255,196,120,.55)'); glow.addColorStop(0.5, 'rgba(240,150,100,.18)'); glow.addColorStop(1, 'rgba(255,200,140,0)');
+    g.fillStyle = glow; g.fillRect(0, 0, W, H);
+    const ridges = [['#43294d', 0.6, 160, 60], ['#321f3f', 0.7, 240, 80], ['#21162e', 0.8, 320, 50], ['#140f1f', 0.9, 420, 70]];
+    ridges.forEach(([c, y, w, a], k) => { g.fillStyle = c; g.beginPath(); g.moveTo(0, H); for (let x = 0; x <= W; x += 8) g.lineTo(x, H * y + Math.sin(x / w + k) * a + Math.sin(x / 37 + k * 2) * 6); g.lineTo(W, H); g.fill(); });
+  }],
+  ['blueprint', 'Blueprint', L, (g, W, H) => {
+    g.fillStyle = '#123f73'; g.fillRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(255,255,255,.14)'; g.lineWidth = 1;
+    for (let x = 0; x <= W; x += 32) { g.beginPath(); g.moveTo(x + .5, 0); g.lineTo(x + .5, H); g.stroke(); }
+    for (let y = 0; y <= H; y += 32) { g.beginPath(); g.moveTo(0, y + .5); g.lineTo(W, y + .5); g.stroke(); }
+    g.strokeStyle = '#e8f1ff'; g.lineWidth = 4;
+    // a split-flap module, front and side
+    const cx = W * 0.36, cy = H * 0.5, s = 330;
+    g.strokeRect(cx - s, cy - s, s * 2, s * 2);
+    g.beginPath(); g.moveTo(cx - s, cy); g.lineTo(cx + s, cy); g.stroke();
+    g.lineWidth = 2; g.setLineDash([14, 10]); g.strokeRect(cx - s + 30, cy - s + 30, s * 2 - 60, s - 50); g.strokeRect(cx - s + 30, cy + 20, s * 2 - 60, s - 50); g.setLineDash([]);
+    g.lineWidth = 4; g.beginPath(); g.arc(cx - s, cy, 22, 0, 7); g.stroke(); g.beginPath(); g.arc(cx + s, cy, 22, 0, 7); g.stroke();
+    // side view: a stack of leaves hanging from the axle, and dimension lines
+    const sx = W * 0.8;
+    g.strokeRect(sx - 14, cy - s, 28, s * 2);
+    for (let k = 0; k < 6; k++) { g.beginPath(); g.moveTo(sx + 14 + k * 9, cy - s + 10); g.lineTo(sx + 14 + k * 9, cy + s - 10); g.stroke(); }
+    g.lineWidth = 2;
+    g.beginPath(); g.moveTo(sx - 90, cy - s); g.lineTo(sx - 90, cy + s); g.moveTo(sx - 104, cy - s); g.lineTo(sx - 76, cy - s); g.moveTo(sx - 104, cy + s); g.lineTo(sx - 76, cy + s); g.stroke();
+    g.beginPath(); g.moveTo(cx - s, cy + s + 30); g.lineTo(cx + s, cy + s + 30); g.moveTo(cx - s, cy + s + 16); g.lineTo(cx - s, cy + s + 44); g.moveTo(cx + s, cy + s + 16); g.lineTo(cx + s, cy + s + 44); g.stroke();
+    g.fillStyle = '#e8f1ff'; g.font = '500 30px "Courier New", monospace'; g.fillText('SIDE', sx - 34, cy + s + 70); g.fillText('FRONT · LEAF 7 / 7', cx - 160, cy + s + 80);
+  }],
+  ['signal-stripes', 'Signal stripes', L, (g, W, H) => {
+    g.fillStyle = '#ece6da'; g.fillRect(0, 0, W, H);
+    const cols = ['#c8432f', '#1b1d21', '#e3a02b', '#2c6a64'];
+    for (let i = -14; i < 40; i++) { g.fillStyle = cols[((i % 4) + 4) % 4]; g.beginPath(); g.moveTo(i * 120, 0); g.lineTo(i * 120 + 60, 0); g.lineTo(i * 120 + 60 - 700, H); g.lineTo(i * 120 - 700, H); g.fill(); }
+    g.fillStyle = '#ece6da'; g.fillRect(W * 0.12, H * 0.33, W * 0.76, H * 0.34);
+    g.fillStyle = '#1b1d21'; g.font = '800 230px "Arial Narrow", "Helvetica Neue", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('SEVENTH LEAF', W / 2, H * 0.505);
+  }],
+  ['tide-pool', 'Tide pool', L, (g, W, H) => {
+    g.fillStyle = '#0c2a29'; g.fillRect(0, 0, W, H);
+    for (let y = 22; y < H; y += 46) for (let x = 22; x < W; x += 46) {
+      const d = Math.hypot(x - W * 0.3, y - H * 0.6); const r = 5 + 15 * (0.5 + 0.5 * Math.sin(d / 60));
+      g.fillStyle = `hsl(${165 + d / 24}, 55%, ${44 + 18 * Math.sin(d / 110)}%)`; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+    }
+  }],
+  ['still-life', 'Still life', L, (g, W, H) => {
+    const hz = H * 0.6;
+    const wall = g.createLinearGradient(0, 0, 0, hz); wall.addColorStop(0, '#cfc6b6'); wall.addColorStop(1, '#bcb2a1'); g.fillStyle = wall; g.fillRect(0, 0, W, hz);
+    g.fillStyle = '#ddd5c6'; g.fillRect(0, hz, W, H - hz);
+    g.strokeStyle = 'rgba(70,60,48,.3)'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, hz); g.lineTo(W, hz); g.stroke();
+    const base = H * 0.8;
+    const shadow = (x, w) => { g.fillStyle = 'rgba(90,78,62,.2)'; g.beginPath(); g.ellipse(x + w * 0.95, base + 4, w * 0.95, 22, -0.06, 0, 7); g.fill(); };
+    const vessel = (x, w, h, top, col) => { shadow(x, w); g.fillStyle = col; g.beginPath(); g.moveTo(x, base); g.lineTo(x, base - h); g.quadraticCurveTo(x + w / 2, base - h - top, x + w, base - h); g.lineTo(x + w, base); g.closePath(); g.fill(); g.fillStyle = 'rgba(110,95,75,.15)'; g.fillRect(x, base - h, w * 0.28, h); };
+    vessel(560, 250, 400, 30, '#dcd5c6');
+    vessel(840, 200, 260, 16, '#7f8fa0');
+    g.fillStyle = '#eee9de'; g.fillRect(1118, 300, 56, 260); vessel(1070, 152, 270, 110, '#eee9de');
+    vessel(1260, 160, 170, 12, '#c4a45f');
+  }],
+  ['aurora', 'Aurora', L, (g, W, H) => {
+    const s = g.createLinearGradient(0, 0, 0, H); s.addColorStop(0, '#060818'); s.addColorStop(1, '#14233c'); g.fillStyle = s; g.fillRect(0, 0, W, H);
+    seed = 7; for (let i = 0; i < 500; i++) { g.fillStyle = `rgba(255,255,255,${rnd() * 0.8})`; g.fillRect(rnd() * W, rnd() * H * 0.7, 2, 2); }
+    g.globalCompositeOperation = 'lighter';
+    for (let band = 0; band < 3; band++) for (let x = 0; x < W; x += 3) {
+      const y = H * (0.28 + band * 0.08) + Math.sin(x / 260 + band) * 90 + Math.sin(x / 70 + band * 3) * 18;
+      const h = 220 + Math.sin(x / 140 + band) * 90;
+      const gr = g.createLinearGradient(0, y - h, 0, y); gr.addColorStop(0, 'rgba(120,60,200,0)'); gr.addColorStop(0.6, `rgba(${band === 1 ? 120 : 60},${200 - band * 30},${150 + band * 30},.10)`); gr.addColorStop(1, 'rgba(90,255,170,.22)');
+      g.fillStyle = gr; g.fillRect(x, y - h, 3, h);
+    }
+    g.globalCompositeOperation = 'source-over';
+    g.fillStyle = '#05070d'; g.beginPath(); g.moveTo(0, H); for (let x = 0; x <= W; x += 10) g.lineTo(x, H * 0.86 + Math.sin(x / 90) * 14 + Math.sin(x / 23) * 4); g.lineTo(W, H); g.fill();
+  }],
+  ['contours', 'Contour map', L, (g, W, H) => {
+    g.fillStyle = '#efe7d6'; g.fillRect(0, 0, W, H);
+    const peaks = [[0.3, 0.45, 1], [0.66, 0.6, 0.8], [0.82, 0.25, 0.6]];
+    const f = (x, y) => peaks.reduce((s, [px, py, a]) => s + a * Math.exp(-(((x / W - px) ** 2) + ((y / H - py) ** 2) * 1.6) / 0.03), 0) + 0.012 * Math.sin(x / 140) * Math.sin(y / 110);
+    const img = g.getImageData(0, 0, W, H); const d = img.data;
+    const tints = [[239, 231, 214], [226, 222, 196], [210, 214, 182], [196, 200, 168], [214, 196, 160], [200, 172, 140], [182, 150, 124]];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const v = f(x, y) * 12; const band = Math.floor(v); const frac = v - band; const o = (y * W + x) * 4;
+      const c = tints[Math.max(0, Math.min(tints.length - 1, band))];
+      const line = band >= 1 && frac < 0.06 ? 0.55 : 1; // no line at sea level
+      d[o] = c[0] * line; d[o + 1] = c[1] * line; d[o + 2] = c[2] * line; d[o + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  }],
+  ['night-city', 'City at night', L, (g, W, H) => {
+    const s = g.createLinearGradient(0, 0, 0, H); s.addColorStop(0, '#0b1230'); s.addColorStop(0.7, '#25325e'); s.addColorStop(1, '#3a3f6a'); g.fillStyle = s; g.fillRect(0, 0, W, H);
+    seed = 11;
+    for (let layer = 0; layer < 3; layer++) {
+      let x = -20;
+      while (x < W) {
+        const w = 60 + rnd() * 120, h = H * (0.25 + rnd() * 0.35) * (1 - layer * 0.2);
+        g.fillStyle = ['#151b38', '#0f1430', '#0a0d22'][layer]; g.fillRect(x, H - h, w, h);
+        for (let wy = H - h + 14; wy < H - 10; wy += 22) for (let wx = x + 8; wx < x + w - 10; wx += 18) if (rnd() < 0.35 - layer * 0.08) { g.fillStyle = `rgba(255,${200 + rnd() * 40},${120 + rnd() * 60},${0.5 + rnd() * 0.5})`; g.fillRect(wx, wy, 8, 11); }
+        x += w + 4;
+      }
+    }
+  }],
+  ['colour-fields', 'Colour fields', L, (g, W, H) => {
+    g.fillStyle = '#5a2e2a'; g.fillRect(0, 0, W, H);
+    const soft = (x, y, w, h, c) => { g.save(); g.filter = 'blur(18px)'; g.fillStyle = c; g.fillRect(x, y, w, h); g.restore(); };
+    soft(W * 0.08, H * 0.1, W * 0.84, H * 0.42, '#c06a3c');
+    soft(W * 0.08, H * 0.58, W * 0.84, H * 0.3, '#2f2a3c');
+    soft(W * 0.12, H * 0.5, W * 0.76, H * 0.06, '#e2b45a');
+  }],
+  ['lighthouse', 'Lighthouse', P, (g, W, H) => {
+    const s = g.createLinearGradient(0, 0, 0, H); s.addColorStop(0, '#16233d'); s.addColorStop(0.62, '#4d6a86'); s.addColorStop(0.63, '#20344b'); s.addColorStop(1, '#0d1a28'); g.fillStyle = s; g.fillRect(0, 0, W, H);
+    g.fillStyle = 'rgba(255,240,190,.12)'; g.beginPath(); g.moveTo(W * 0.5, H * 0.3); g.lineTo(-200, H * 0.12); g.lineTo(-200, H * 0.36); g.fill();
+    g.fillStyle = '#e9e2d0'; g.beginPath(); g.moveTo(W * 0.44, H * 0.72); g.lineTo(W * 0.47, H * 0.32); g.lineTo(W * 0.53, H * 0.32); g.lineTo(W * 0.56, H * 0.72); g.fill();
+    g.fillStyle = '#2b3446'; for (let k = 0; k < 3; k++) g.fillRect(W * 0.448 + k * 3, H * (0.42 + k * 0.1), W * 0.104 - k * 6, H * 0.035);
+    g.fillStyle = '#ffe9a8'; g.fillRect(W * 0.465, H * 0.29, W * 0.07, H * 0.035);
+    g.fillStyle = '#1a2230'; g.fillRect(W * 0.455, H * 0.27, W * 0.09, H * 0.02);
+    g.fillStyle = '#121a26'; g.beginPath(); g.moveTo(0, H); g.lineTo(0, H * 0.74); g.lineTo(W * 0.35, H * 0.7); g.lineTo(W * 0.7, H * 0.73); g.lineTo(W, H * 0.78); g.lineTo(W, H); g.fill();
+  }],
+  ['tall-window', 'Tall window', P, (g, W, H) => {
+    g.fillStyle = '#d9cdb8'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#c7b9a1'; g.fillRect(0, H * 0.82, W, H * 0.18);
+    const wx = W * 0.25, wy = H * 0.12, ww = W * 0.5, wh = H * 0.55;
+    const sky = g.createLinearGradient(0, wy, 0, wy + wh); sky.addColorStop(0, '#9fc3dc'); sky.addColorStop(1, '#e7f0f2'); g.fillStyle = sky; g.fillRect(wx, wy, ww, wh);
+    g.fillStyle = '#6f5c46'; g.fillRect(wx + ww / 2 - 8, wy, 16, wh); g.fillRect(wx, wy + wh * 0.42, ww, 16);
+    g.strokeStyle = '#6f5c46'; g.lineWidth = 22; g.strokeRect(wx, wy, ww, wh);
+    g.fillStyle = 'rgba(255,248,220,.45)'; g.beginPath(); g.moveTo(wx + 20, wy + wh); g.lineTo(wx + ww - 20, wy + wh); g.lineTo(W * 0.95, H * 0.98); g.lineTo(W * 0.2, H * 0.98); g.fill();
+  }],
+  ['birches', 'Birches', P, (g, W, H) => {
+    const s = g.createLinearGradient(0, 0, 0, H); s.addColorStop(0, '#dfe5d8'); s.addColorStop(1, '#b9c3a8'); g.fillStyle = s; g.fillRect(0, 0, W, H);
+    seed = 23;
+    for (let k = 0; k < 9; k++) {
+      const x = rnd() * W, w = 30 + rnd() * 50, far = rnd();
+      g.fillStyle = `rgba(245,243,235,${0.55 + far * 0.45})`; g.fillRect(x, 0, w, H);
+      for (let y = 0; y < H; y += 40 + rnd() * 80) { g.fillStyle = `rgba(40,40,36,${0.4 + rnd() * 0.4})`; g.fillRect(x + rnd() * w * 0.5, y, w * (0.2 + rnd() * 0.5), 4 + rnd() * 8); }
+    }
+    g.fillStyle = 'rgba(110,130,80,.35)'; g.fillRect(0, H * 0.88, W, H * 0.12);
+  }],
+  ['leaf', 'A leaf', P, (g, W, H) => {
+    g.fillStyle = '#e8e3d6'; g.fillRect(0, 0, W, H);
+    g.save(); g.translate(W * 0.5, H * 0.52); g.rotate(-0.18);
+    const lw = W * 0.34, lh = H * 0.36;
+    const leaf = new Path2D(); leaf.moveTo(0, -lh); leaf.bezierCurveTo(lw * 1.1, -lh * 0.5, lw * 0.9, lh * 0.5, 0, lh); leaf.bezierCurveTo(-lw * 0.9, lh * 0.5, -lw * 1.1, -lh * 0.5, 0, -lh);
+    const gr = g.createLinearGradient(-lw, 0, lw, 0); gr.addColorStop(0, '#5f7d3a'); gr.addColorStop(1, '#8aa255'); g.fillStyle = gr; g.fill(leaf);
+    g.strokeStyle = 'rgba(235,240,210,.7)'; g.lineWidth = 6; g.beginPath(); g.moveTo(0, -lh * 0.95); g.lineTo(0, lh * 1.25); g.stroke();
+    g.lineWidth = 3; for (let k = 1; k < 9; k++) { const y = -lh + k * lh * 0.22; for (const s of [-1, 1]) { g.beginPath(); g.moveTo(0, y); g.quadraticCurveTo(s * lw * 0.35, y - 30, s * lw * 0.62 * Math.sin(Math.PI * k / 9.5), y - 70); g.stroke(); } }
+    g.restore();
+  }],
+];
+
+const out = document.getElementById('out');
+window.demoPictures = pictures.map(([id, name, [W, H], draw]) => {
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  seed = 1; draw(c.getContext('2d'), W, H);
+  const f = document.createElement('figure'); f.append(c); const cap = document.createElement('figcaption'); cap.textContent = name; f.append(cap); out.append(f);
+  return { id, name, canvas: c };
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seventh Leaf</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="panel-open">
+<canvas id="wall"></canvas>
+
+<div id="start">
+  <div>
+    <h1>SEVENTH LEAF</h1>
+    <p data-i18n="start.desc">A wall of 12 × 7 split-flap cells. Every change, each cell flips seven times through other artwork before the new image settles.</p>
+    <button data-i18n="start.go">Start</button>
+    <small data-i18n="start.help">Sound starts with this click. Drag to look around · click a cell to flip it · Shift-click for a ripple · H hides the controls</small>
+  </div>
+</div>
+
+<div id="bar">
+  <button id="prev" data-i18n-title="bar.prev">◀</button>
+  <button id="auto">❚❚</button>
+  <button id="next" data-i18n-title="bar.next">▶</button>
+  <span id="title"></span><span id="count"></span>
+  <span id="now-music"></span>
+  <div id="lang" role="group" data-i18n-title="bar.lang">
+    <button data-lang="en">EN</button><button data-lang="zh">CN</button><button data-lang="ja">JP</button>
+  </div>
+  <button id="panel-toggle" data-i18n-title="bar.controls">☰</button>
+</div>
+
+<aside id="panel">
+  <nav class="tabs">
+    <button data-page="p-wall" class="on" data-i18n="tab.wall">Wall</button>
+    <button data-page="p-lib" data-i18n="tab.lib">Library</button>
+    <button data-page="p-sound" data-i18n="tab.sound">Sound</button>
+  </nav>
+
+  <section class="page" id="p-wall">
+    <label><span data-i18n="wall.pattern">Wave pattern</span> <select id="pattern"></select></label>
+    <label><span data-i18n="wall.flips">Flips per cell</span> <output id="flips-v"></output><input id="flips" type="range" min="1" max="12" step="1"></label>
+    <label><span data-i18n="wall.interval">Time between flips</span> <output id="interval-v"></output><input id="interval" type="range" min="0.15" max="0.7" step="0.01"></label>
+    <label><span data-i18n="wall.span">Wave crossing time</span> <output id="span-v"></output><input id="span" type="range" min="0" max="5" step="0.1"></label>
+    <label><span data-i18n="wall.order">In-between leaves</span>
+      <select id="order"><option value="random" data-i18n="wall.order.random">Random artwork per cell</option><option value="deck" data-i18n="wall.order.deck">Library order (one drum)</option></select>
+    </label>
+    <label class="check"><input id="clock" type="checkbox"> <span data-i18n="wall.clock">Shared mechanical clock</span></label>
+    <hr>
+    <label class="check"><input id="triptych" type="checkbox"> <span data-i18n="wall.triptych">Three-portrait layout</span></label>
+    <p class="hint" data-i18n="wall.triptych.hint">Shows portrait images three at a time, side by side, so they fill the wall.</p>
+    <label><span data-i18n="wall.hold">Hold each image</span> <output id="hold-v"></output><input id="hold" type="range" min="2" max="60" step="1"></label>
+    <label class="check"><input id="shuffle" type="checkbox"> <span data-i18n="wall.shuffle">Shuffle</span></label>
+    <label class="check"><input id="wait-video" type="checkbox"> <span data-i18n="wall.waitVideo">Let videos play to the end</span></label>
+    <hr>
+    <label><span data-i18n="wall.mode">Leaves</span> <select id="mode"><option value="printed" data-i18n="wall.mode.printed">Printed artwork (like the exhibition)</option><option value="projected" data-i18n="wall.mode.projected">Black leaves + projector</option></select></label>
+    <label class="check"><input id="details" type="checkbox"> <span data-i18n="wall.details">Show axle rings and leaf stops</span></label>
+    <label><span data-i18n="wall.view">View</span> <select id="view"><option value="front" data-i18n="wall.view.front">Front</option><option value="angled" data-i18n="wall.view.angled">From the side</option></select></label>
+    <p class="hint" data-i18n="wall.keys">Keys: ← → change · Space play/pause · 1–7 patterns · M music · F fullscreen · H hide controls</p>
+  </section>
+
+  <section class="page" id="p-lib" hidden>
+    <div class="row">
+      <label class="btn"><span data-i18n="lib.import">+ Import images / videos</span><input id="import" type="file" accept="image/*,video/*" multiple hidden></label>
+    </div>
+    <p class="hint" data-i18n="lib.hint">Or drop files anywhere. Click a thumbnail to show it; drag to reorder.</p>
+    <div id="grid"></div>
+    <button id="restore" class="link" hidden></button>
+    <div id="editor" hidden>
+      <h3 id="ed-name"></h3>
+      <p id="ed-set" class="hint" data-i18n="lib.set">Shown in a three-portrait set. Adjust its crop below.</p>
+      <label id="ed-fit-row"><span data-i18n="lib.fit">Fit to wall</span> <select id="ed-fit"><option value="auto" data-i18n="lib.fit.auto">Auto</option><option value="cover" data-i18n="lib.fit.cover">Fill (crop)</option><option value="contain" data-i18n="lib.fit.contain">Whole image (blurred surround)</option></select></label>
+      <div id="ed-cover">
+        <label><span data-i18n="lib.fx">Horizontal focus</span> <input id="ed-fx" type="range" min="0" max="1" step="0.01"></label>
+        <label><span data-i18n="lib.fy">Vertical focus</span> <input id="ed-fy" type="range" min="0" max="1" step="0.01"></label>
+        <label><span data-i18n="lib.zoom">Zoom</span> <input id="ed-zoom" type="range" min="1" max="3" step="0.01"></label>
+      </div>
+      <div id="ed-video">
+        <label class="check"><input id="ed-loop" type="checkbox"> <span data-i18n="lib.loop">Loop</span></label>
+        <label class="check"><input id="ed-mute" type="checkbox"> <span data-i18n="lib.mute">Mute this video</span></label>
+      </div>
+    </div>
+  </section>
+
+  <section class="page" id="p-sound" hidden>
+    <label><span data-i18n="sound.master">Master</span> <output id="vol-master-v"></output><input id="vol-master" type="range" min="0" max="1" step="0.01"></label>
+    <label><span data-i18n="sound.flips">Flip sounds</span> <output id="vol-flips-v"></output><input id="vol-flips" type="range" min="0" max="1" step="0.01"></label>
+    <label><span data-i18n="sound.room">Room echo (flip sounds)</span> <output id="vol-room-v"></output><input id="vol-room" type="range" min="0" max="1" step="0.01"></label>
+    <label><span data-i18n="sound.music">Music</span> <output id="vol-music-v"></output><input id="vol-music" type="range" min="0" max="1" step="0.01"></label>
+    <label><span data-i18n="sound.video">Video sound</span> <output id="vol-video-v"></output><input id="vol-video" type="range" min="0" max="1" step="0.01"></label>
+    <label><span data-i18n="sound.duck">When a video has sound</span> <select id="duck"></select></label>
+    <hr>
+    <div class="row">
+      <h3 data-i18n="sound.music">Music</h3>
+      <button id="music-play">▶</button><button id="music-next" data-i18n-title="sound.nextTrack">⏭</button>
+      <label class="check"><input id="music-shuffle" type="checkbox"> <span data-i18n="sound.shuffle">Shuffle</span></label>
+    </div>
+    <ul id="music"></ul>
+    <p id="music-empty" class="hint" data-i18n="sound.noMusic">No music yet.</p>
+    <label class="btn"><span data-i18n="sound.addMusic">+ Add music files</span><input id="music-add" type="file" accept="audio/*" multiple hidden></label>
+    <hr>
+    <h3 data-i18n="sound.flipTitle">Flip sound</h3>
+    <p class="hint"><span data-i18n="sound.now">Now:</span> <span id="flip-src"></span></p>
+    <div class="row">
+      <label class="btn"><span data-i18n="sound.own">Use my own sample…</span><input id="flip-file" type="file" accept="audio/*" hidden></label>
+      <button id="flip-reset" class="link" data-i18n="sound.reset">Back to built-in</button>
+    </div>
+  </section>
+</aside>
+
+<div id="toast"></div>
+<div id="drop" data-i18n="drop">Drop images, videos or music</div>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
