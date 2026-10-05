@@ -253,6 +253,7 @@ function inUse() {
   }
   if (seq.lastChange.from) keep.add(seq.lastChange.from);
   if (prefetched) keep.add(prefetched);
+  for (const s of pending) keep.add(s); // loading for a change that has not started yet
   return keep;
 }
 
@@ -292,20 +293,26 @@ function ensure(list) {
 }
 
 let goToken = 0;
+let pending = [];
 async function go(i, origin, skips = 0) {
-  if (!deck.length) return;
+  if (!deck.length) return scheduleNext(now());
   index = wrap(i);
   const target = current();
   const token = ++goToken;
   updateTitle();
   let pool = poolFor(target);
+  pending = pool;
   await ensure(pool);
   if (token !== goToken) return; // a newer change was asked for meanwhile
+  pending = [];
   // folder files that cannot be read are skipped (and counted); the next picture is tried instead
   const failed = pool.filter((s) => !lib.isLoaded(s) && (s.members || [s]).some((m) => m.error));
   if (failed.length) {
     for (const s of failed) for (const m of s.members || [s]) if (m.error) folders[m.item.folder]?.markBad(m.item);
-    if (failed.includes(target)) return skips < 20 && go(pickNext(), origin, skips + 1);
+    if (failed.includes(target)) {
+      if (skips < 20) return go(pickNext(), origin, skips + 1);
+      return scheduleNext(now()); // try again after the usual hold
+    }
     pool = pool.filter((s) => !failed.includes(s));
   }
   seq.pool = pool;
@@ -1028,7 +1035,12 @@ function frame() {
   const dt = Math.min(0.1, t - last);
   last = t;
   seq.update(t);
-  if (t >= nextAt && sound) next();
+  // once: preparing a change can take longer than a frame, and asking again every frame would
+  // abandon each change before it could start (go() schedules the one after)
+  if (t >= nextAt && sound) {
+    nextAt = Infinity;
+    next();
+  }
   if ((videoTick += dt) > 0.5) {
     videoTick = 0;
     syncVideos(false);
