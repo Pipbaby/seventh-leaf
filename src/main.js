@@ -752,7 +752,8 @@ for (const f of Object.values(folders)) {
     else if (f.slot === 'pictures' && (what === 'thumb' || what === 'size')) {
       for (const card of $('#grid').children) if (card.item === e) fillCard(card, e);
       // a picture's size decides whether it joins a portrait set
-      if (fromFolder && settings.triptych && e.kind === 'image' && (what === 'size' || portrait(e))) soon(refreshDeck);
+      // not too often: regrouping reloads pictures on the wall, and sizes arrive many per second
+      if (fromFolder && settings.triptych && e.kind === 'image' && (what === 'size' || portrait(e))) soon(refreshDeck, 6000);
     }
   });
 }

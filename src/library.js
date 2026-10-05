@@ -402,7 +402,12 @@ async function loadImage(src, renderer) {
   t.anisotropy = renderer.capabilities.getMaxAnisotropy();
   t.minFilter = THREE.LinearMipmapLinearFilter;
   src.aspect = img.width / img.height;
-  src.bg = blurredBackdrop(img, img.width, img.height);
+  // the blurred surround is only 384 px wide: draw it from a small copy, made off the main thread,
+  // because blurring the full picture on the main thread froze the page for up to seconds
+  const k = Math.min(1, 512 / Math.max(img.width, img.height));
+  const small = await createImageBitmap(img, { resizeWidth: Math.max(1, Math.round(img.width * k)), resizeHeight: Math.max(1, Math.round(img.height * k)), resizeQuality: 'medium' });
+  src.bg = blurredBackdrop(small, small.width, small.height);
+  small.close();
   xformFor(src.item, src.aspect, src.xform);
   src.texture = t;
   if (src.measured && (img.width !== src.item.w || img.height !== src.item.h)) src.measured(img.width, img.height);
