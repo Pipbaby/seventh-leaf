@@ -17,24 +17,41 @@ Everything runs in your browser. Your photos, videos and music stay on your own 
 
 ## Run it on your own computer
 
-The live demo above needs no installation. To run your own copy, you need the project files and
-any simple local web server. There is no build step.
+The live demo above needs no installation, but it needs an internet connection to open. Your own
+copy runs without one.
 
-1. Download the project (**Code → Download ZIP** on GitHub) and unzip it.
-2. Open a terminal in the unzipped folder and run **one** of these:
+1. Download the latest release (**Releases → Source code (zip)** on GitHub) and unzip it.
+2. Double-click the starter in the unzipped folder:
+   - **Windows:** `Start Seventh Leaf.bat`. Nothing else is needed.
+   - **macOS:** `Start Seventh Leaf.command`. It needs Python 3 (from
+     [python.org](https://www.python.org/downloads/) if it is not installed yet).
+   - **Linux:** run `sh "Start Seventh Leaf.command"` in a terminal (needs `python3`).
+3. Your browser opens Seventh Leaf. Click **Start**: sound can only begin after a click.
 
-   ```bash
-   python -m http.server 8000
-   ```
+A small window stays open while Seventh Leaf runs. **Close it to stop Seventh Leaf.**
 
-   ```bash
-   npx serve .
-   ```
+The wall opens with a set of demo pictures. Add your own in the **Library** tab. Use Chrome or Edge
+for folder mode at its best.
 
-3. Open <http://localhost:8000> in your browser (or the address `npx serve` prints) and click
-   **Start**. Sound can only begin after a click.
+**About the starter**
 
-The wall opens with a set of demo pictures. Add your own in the **Library** tab.
+- It is a tiny web server for this folder, written in PowerShell on Windows and Python elsewhere
+  (`tools/launcher/`). It installs nothing, changes no settings and needs no admin rights.
+- Only your own computer can reach it (`127.0.0.1`), so the firewall does not ask, and other
+  devices on your network cannot see it.
+- It always uses the same address, `http://127.0.0.1:41777/`, because the browser keeps your
+  library, settings and chosen folders per address. If another program already uses port 41777,
+  it takes the next free port up to 41786 and says so; at that address the library starts empty
+  until 41777 is free again.
+- Double-clicking it while Seventh Leaf is running just opens it again. If a **different copy** is
+  running (an older version, or one from another folder), it is stopped and replaced, so you never
+  keep using an old version by mistake.
+- The first time, Windows may ask whether to run a file downloaded from the internet, and macOS may
+  say it is from an unidentified developer. On a Mac, right-click the file, choose **Open**, then
+  **Open** again. This is needed once.
+
+Prefer a terminal? Any simple web server works too, for example `python -m http.server 8000` in
+the unzipped folder, then open <http://localhost:8000>. (That address keeps a library of its own.)
 
 ## What you can do
 
@@ -112,8 +129,9 @@ and nothing leaves your computer. **Forget this folder** removes the index.
 
 `tools/test-folder-mode.html` tests all of this without a folder picker. It fills the browser's
 private file system with a few thousand generated pictures, videos and sounds, then scans, rescans,
-flips the wall, scrolls the grid and plays the music, and reports what it measured. Open it from
-your local web server in Chrome or Edge and press **Run**.
+flips the wall, scrolls the grid and plays the music, and reports what it measured. With the
+starter running, open <http://127.0.0.1:41777/tools/test-folder-mode.html> in Chrome or Edge and
+press **Run**.
 
 ## Your own picture folder (optional)
 

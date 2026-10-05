@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 — double-click starter
+
+- **Start Seventh Leaf by double-clicking** `Start Seventh Leaf.bat` (Windows) or
+  `Start Seventh Leaf.command` (macOS; Linux runs it with `sh`). No terminal, and on Windows no
+  Python: the starter is a tiny web server in PowerShell (Python on macOS and Linux) that opens
+  the browser. Close its window to stop Seventh Leaf.
+- It listens only on `127.0.0.1` (nothing on the network can reach it), on a fixed port, 41777,
+  so the browser finds the saved library again. If another program uses that port, it takes the
+  next free one up to 41786 and explains what that means.
+- Starting it while Seventh Leaf is running opens the running copy. A different copy (another
+  version or folder) is stopped and replaced, so an old version cannot keep running by mistake.
+- It answers only requests addressed to itself, serves nothing outside the project folder, and
+  tells the browser to check for newer files every time.
+
 ## 0.2.1 — automatic changes with large folders
 
 - Fixed: with a large folder (for example 1,000 PNGs in subfolders, many of them in three-portrait
