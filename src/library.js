@@ -108,8 +108,10 @@ export async function listItems() {
   const meta = store('seventhleaf.localMeta', {});
   let local = [];
   try {
+    // a private local/ folder only exists when running on your own computer
+    const onThisComputer = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
     let dir = 'local';
-    let deck = await fetch('local/deck.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    let deck = onThisComputer ? await fetch('local/deck.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null;
     if (!deck) {
       dir = 'demo';
       deck = await fetch('demo/deck.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);

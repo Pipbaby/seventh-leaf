@@ -736,7 +736,12 @@ async function start() {
     flipName = f.name;
     renderFlipSrc();
   }
-  if (music.list.length) musicPlay(0);
+  // a page that hosts Seventh Leaf (?embedded) may already be playing music of its own
+  let hostPlaying = false;
+  try {
+    hostPlaying = new URLSearchParams(location.search).has('embedded') && !!window.parent?.museumMusicPlaying?.();
+  } catch {}
+  if (music.list.length && !hostPlaying) musicPlay(0);
   // first change right away, so the wall introduces itself
   if (sources.length > 1) next();
   else syncVideos(true);
