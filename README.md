@@ -98,7 +98,11 @@ and nothing leaves your computer. **Forget this folder** removes the index.
   on the GPU. The rest are released, with their object URLs. Three-portrait sets are put together
   only when they come up, so shuffle and the three-portrait layout work with any number of
   pictures.
-- **Pictures larger than 4096 px** are scaled down before they are uploaded to the GPU.
+- **Pictures are decoded in a Web Worker**, straight from the file to at most 2560 px on the long
+  side (the size imports are stored at), two at a time. The decoded copy is closed as soon as it
+  is on the GPU, so full-size phone photos never pass through the main thread and the wall keeps
+  flipping smoothly while they load. A portrait in a three-portrait set is decoded only as large
+  as its panel.
 - **Thumbnails** are made in a Web Worker, two or three at a time, straight from the file at
   reduced size (`createImageBitmap` with `resizeWidth`). Video thumbnails are a frame near 1 s,
   made one at a time when the page is idle.

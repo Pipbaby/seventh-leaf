@@ -40,7 +40,7 @@
 <script type="module">
 const params = new URLSearchParams(location.search);
 const N = +params.get('n') || 3000;
-const BIG = 4; // pictures larger than 4096 px
+const BIG = 4; // pictures larger than 4096 px (shown at 2560)
 const BROKEN = 10; // .jpg files that are not pictures
 const ADD = 50; // added before the rescan
 const DELETE = 30; // deleted before the rescan
@@ -367,11 +367,11 @@ async function run() {
   await change(() => sl.go(setAt));
   const set = sl.seq.lastChange.to;
   check('A three-portrait set shows', set?.composite && set.members.length >= 2 && set.texture, set?.item.name);
-  // a picture larger than 4096 px is scaled down before upload
+  // a large picture goes to the GPU at 2560 px on its long side, as imports are stored
   const bigChange = await frames(win, () => change(() => sl.go(sl.deck.findIndex((e) => e.path === 'big/large-0.jpg'))));
   const large = sl.seq.lastChange.to;
   metric('Longest frame while a 5200 px picture comes up', `${bigChange.max.toFixed(0)} ms`, `p95 ${bigChange.p95.toFixed(0)} ms`);
-  check('A 5200 px picture is scaled to 4096 px', large?.texture?.image.width === 4096, `${large?.texture?.image.width}×${large?.texture?.image.height}`);
+  check('A 5200 px picture is scaled to 2560 px', large?.texture?.image.width === 2560, `${large?.texture?.image.width}×${large?.texture?.image.height}`);
   if (videos) {
     await change(() => sl.go(sl.deck.findIndex((e) => e.path === 'videos/clip-0.webm')));
     const v = sl.seq.lastChange.to;

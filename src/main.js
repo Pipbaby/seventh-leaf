@@ -562,9 +562,7 @@ async function editSelected(patch) {
   } else await lib.updateItem(it, patch);
   lib.xformFor(it, s.aspect || WALL_ASPECT, s.xform);
   for (const set of live.values()) {
-    if (!set.members?.includes(s) || !lib.isLoaded(set)) continue;
-    await ensure(set.members);
-    lib.drawComposite(set);
+    if (set.members?.includes(s) && lib.isLoaded(set)) lib.drawComposite(set, wall.renderer);
   }
   if (s.el) s.el.loop = it.loop !== false;
   // re-apply to every cell showing it
@@ -906,6 +904,12 @@ $('#panel-toggle').onclick = () => {
 };
 addEventListener('resize', layout);
 layout();
+
+// pictures keep their pixels only on the GPU: if it was reset, they load again from their files
+canvas.addEventListener('webglcontextrestored', () => {
+  for (const s of live.values()) if (s.kind === 'image') lib.releaseSource(s);
+  if (deck.length) go(index);
+});
 
 // ── wall interaction: drag to look around, click a cell to flip it, shift-click for a ripple
 let drag = null;

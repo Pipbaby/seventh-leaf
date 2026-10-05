@@ -265,22 +265,75 @@ export function xformFor(item, aspect, v = new THREE.Vector4()) {
   return v;
 }
 
-function blurredBackdrop(img, w, h) {
-  const c = document.createElement('canvas');
-  c.width = 384;
-  c.height = Math.round(384 / WALL_ASPECT);
-  const g = c.getContext('2d');
-  const a = w / h;
-  const A = c.width / c.height;
-  const dw = a > A ? c.height * a : c.width;
-  const dh = a > A ? c.height : c.width / a;
-  g.filter = 'blur(14px) saturate(1.1)';
-  g.drawImage(img, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh);
-  g.filter = 'none';
-  g.fillStyle = 'rgba(0,0,0,0.3)';
-  g.fillRect(0, 0, c.width, c.height);
-  const t = new THREE.CanvasTexture(c);
+// ── decoding: off the main thread, at the size shown, a few at a time ─────────────────────
+// Pictures are decoded from their files in a worker (decode-worker.js), straight to at most
+// TEX_MAX px, and uploaded to the GPU as soon as they arrive; the bitmap is closed right after,
+// so only the texture holds the pixels. Decoding a 4096 px photo through an <img> instead froze
+// the wall for seconds: the browser drops an <img>'s decoded pixels and decodes the full photo
+// again, on the main thread, whenever it is drawn or uploaded. At most DECODING pictures decode
+// at once, so a change through a big folder cannot pile up full-size photos in memory.
+const TEX_MAX = 2560;
+const DECODING = 2;
+let decoding = 0;
+const waiting = [];
+let worker = null;
+let lastId = 0;
+const replies = new Map();
+
+async function decode(msg) {
+  while (decoding >= DECODING) await new Promise((r) => waiting.push(r));
+  decoding++;
+  try {
+    if (!worker) {
+      worker = new Worker(new URL('./decode-worker.js', import.meta.url));
+      worker.onmessage = ({ data }) => {
+        const r = replies.get(data.id);
+        replies.delete(data.id);
+        if (data.error) r.rej(Object.assign(new Error(data.error), { part: data.part }));
+        else r.res(data);
+      };
+    }
+    return await new Promise((res, rej) => {
+      const id = ++lastId;
+      replies.set(id, { res, rej });
+      worker.postMessage({ id, ...msg });
+    });
+  } finally {
+    decoding--;
+    waiting.shift()?.();
+  }
+}
+
+async function blobOf(src) {
+  if (src.file) return src.file();
+  if (src.item.blob) return src.item.blob;
+  const r = await fetch(src.url);
+  if (!r.ok) throw new Error('Cannot load ' + src.item.name);
+  return r.blob();
+}
+
+// the upright size the library knows (the thumbnail worker measures it); without one the worker
+// decodes the picture whole first
+const sizeOf = (item) => (item.w && item.h ? [item.w, item.h] : null);
+
+// A texture for a bitmap from the worker, already upside down as WebGL wants it. Its pixels go to
+// the GPU now and the bitmap is closed: the texture keeps only its size (nothing uploads an image
+// texture again; a lost GPU context reloads the pictures from their files, see main.js).
+function upload(renderer, t, bmp) {
+  t.image = bmp;
+  t.needsUpdate = true;
+  renderer.initTexture(t);
+  t.image = { width: bmp.width, height: bmp.height };
+  bmp.close();
+  return t;
+}
+
+function bitmapTexture(renderer) {
+  const t = new THREE.Texture();
+  t.flipY = false;
   t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  t.minFilter = THREE.LinearMipmapLinearFilter;
   return t;
 }
 
@@ -343,28 +396,23 @@ function closeVideo(v) {
 
 export const isLoaded = (src) => !!src.texture;
 
-// make sure a source's pixels are on the GPU (sets: their members first, then the drawing)
+// make sure a source's pixels are on the GPU (sets: drawn from their members' files; the members
+// themselves never get a texture)
 export function ensureSource(src, renderer) {
   if (src.texture) return Promise.resolve(src);
   if (src.loading) return src.loading;
   src.loading = (async () => {
     if (src.composite) {
-      await Promise.all(src.members.map((m) => ensureSource(m, renderer)));
-      if (!src.canvas) {
-        src.canvas = document.createElement('canvas');
-        src.canvas.width = 2400;
-        src.canvas.height = Math.round(2400 / WALL_ASPECT);
-      }
-      src.texture = new THREE.CanvasTexture(src.canvas);
-      src.texture.colorSpace = THREE.SRGBColorSpace;
-      src.texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      drawComposite(src);
+      const t = bitmapTexture(renderer);
+      await paintComposite(src, t, renderer);
+      src.texture = t;
     } else if (src.file) {
       // read the file only now; a failure is remembered so the item can be skipped
       try {
-        src.url = URL.createObjectURL(await src.file());
-        if (src.kind === 'video') await openVideo(src);
-        else await loadImage(src, renderer);
+        if (src.kind === 'video') {
+          src.url = URL.createObjectURL(await src.file());
+          await openVideo(src);
+        } else await loadImage(src, renderer);
       } catch (e) {
         src.error = e;
         if (src.url) URL.revokeObjectURL(src.url);
@@ -382,35 +430,17 @@ export function ensureSource(src, renderer) {
   return src.loading;
 }
 
-// pictures larger than 4096 px (or what the GPU allows) are scaled down before they are uploaded
+// A picture goes to the GPU at most TEX_MAX px on its long side (or what the GPU allows), as
+// imports are stored. Its blurred surround is drawn from a second, 512 px decode.
 async function loadImage(src, renderer) {
-  const img = new Image();
-  img.src = src.url;
-  await img.decode();
-  let el = img;
-  const max = Math.min(renderer.capabilities.maxTextureSize, 4096);
-  if (Math.max(img.width, img.height) > max) {
-    const k = max / Math.max(img.width, img.height);
-    el = document.createElement('canvas');
-    el.width = Math.round(img.width * k);
-    el.height = Math.round(img.height * k);
-    el.getContext('2d').drawImage(img, 0, 0, el.width, el.height);
-  }
-  const t = new THREE.Texture(el);
-  t.needsUpdate = true;
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  t.minFilter = THREE.LinearMipmapLinearFilter;
-  src.aspect = img.width / img.height;
-  // the blurred surround is only 384 px wide: draw it from a small copy, made off the main thread,
-  // because blurring the full picture on the main thread froze the page for up to seconds
-  const k = Math.min(1, 512 / Math.max(img.width, img.height));
-  const small = await createImageBitmap(img, { resizeWidth: Math.max(1, Math.round(img.width * k)), resizeHeight: Math.max(1, Math.round(img.height * k)), resizeQuality: 'medium' });
-  src.bg = blurredBackdrop(small, small.width, small.height);
-  small.close();
+  const size = sizeOf(src.item);
+  const bg = [384, Math.round(384 / WALL_ASPECT)];
+  const out = await decode({ kind: 'picture', blob: await blobOf(src), size, max: Math.min(renderer.capabilities.maxTextureSize, TEX_MAX), bg });
+  src.bg = upload(renderer, bitmapTexture(renderer), out.bg);
+  src.texture = upload(renderer, bitmapTexture(renderer), out.pic);
+  src.aspect = out.w / out.h;
   xformFor(src.item, src.aspect, src.xform);
-  src.texture = t;
-  if (src.measured && (img.width !== src.item.w || img.height !== src.item.h)) src.measured(img.width, img.height);
+  if (!size) src.measured?.(out.w, out.h);
 }
 
 // free a source's GPU memory; it reloads the next time it is needed (imported videos stay)
@@ -420,11 +450,10 @@ export function releaseSource(src) {
   src.texture = null;
   if (src.bg && src.bg !== BLACK) src.bg.dispose();
   if (!src.composite) src.bg = null;
-  if (src.composite) src.canvas = null;
   if (src.file) {
     if (src.el) closeVideo(src.el);
     src.el = null;
-    URL.revokeObjectURL(src.url);
+    if (src.url) URL.revokeObjectURL(src.url);
     src.url = null;
   }
 }
@@ -442,18 +471,17 @@ export function disposeSource(src) {
 // With 12 columns the panels are exactly 4 (or 6) cells wide, so their edges fall on cell gaps.
 export const isPortrait = (src) => src.kind === 'image' && !src.composite && src.aspect < 0.85;
 
+const SET_W = 2400;
+const SET_H = Math.round(SET_W / WALL_ASPECT);
+
 export function makeComposite(parts, renderer) {
-  const W = 2400;
-  const H = Math.round(W / WALL_ASPECT);
-  const c = null;
   const id = 'set:' + parts.map((p) => p.id).join('+');
   const src = {
     id,
     kind: 'image',
     composite: true,
     members: parts,
-    canvas: c,
-    aspect: W / H,
+    aspect: SET_W / SET_H,
     xform: new THREE.Vector4(1, 1, 0, 0),
     bg: BLACK,
     item: { id, name: parts.map((p) => p.item.name).join(' · '), fit: 'cover', focus: [0.5, 0.5] },
@@ -462,32 +490,48 @@ export function makeComposite(parts, renderer) {
   return src;
 }
 
-export function drawComposite(src) {
-  const c = src.canvas;
-  if (!c || !src.texture || src.members.some((m) => !m.texture)) return;
-  const g = c.getContext('2d');
-  const n = src.members.length;
-  g.fillStyle = '#000';
-  g.fillRect(0, 0, c.width, c.height);
-  src.members.forEach((p, k) => {
-    const img = p.texture.image;
-    const iw = img.width;
-    const ih = img.height;
-    const x0 = Math.round((k * c.width) / n);
-    const pw = Math.round(((k + 1) * c.width) / n) - x0;
-    const pa = pw / c.height;
-    const zoom = p.item.zoom || 1;
-    const [fx, fy] = p.item.focus || [0.5, 0.7];
-    let sw;
-    let sh;
-    if (iw / ih > pa) {
-      sh = ih / zoom;
-      sw = sh * pa;
-    } else {
-      sw = iw / zoom;
-      sh = sw / pa;
+// The worker draws the set from its members' files, each decoded only as large as its panel
+// needs. A member that cannot be read is remembered, so the set can be skipped. redraw: the set is
+// already on the wall; it is left alone if it was released meanwhile.
+async function paintComposite(src, t, renderer, redraw) {
+  const parts = [];
+  for (const p of src.members) {
+    try {
+      parts.push({ blob: await blobOf(p), size: sizeOf(p.item), zoom: p.item.zoom, focus: p.item.focus });
+    } catch (e) {
+      if (p.file) p.error = e;
+      throw e;
     }
-    g.drawImage(img, (iw - sw) * fx, (ih - sh) * (1 - fy), sw, sh, x0, 0, pw, c.height);
-  });
-  src.texture.needsUpdate = true;
+  }
+  let out;
+  try {
+    out = await decode({ kind: 'set', parts, W: SET_W, H: SET_H });
+  } catch (e) {
+    const p = src.members[e.part];
+    if (p?.file) p.error = e;
+    throw e;
+  }
+  src.members.forEach((p, k) => sizeOf(p.item) || p.measured?.(...out.sizes[k]));
+  if (redraw && src.texture !== t) out.pic.close();
+  else upload(renderer, t, out.pic);
+}
+
+// redraw a set on the wall after a member's framing changed; edits come quickly, so one redraw
+// runs at a time and the last edit is drawn when it finishes
+export function drawComposite(src, renderer) {
+  if (!src.texture) return;
+  if (src.redrawing) {
+    src.redrawAgain = true;
+    return;
+  }
+  src.redrawing = true;
+  paintComposite(src, src.texture, renderer, true)
+    .catch((e) => console.warn(e))
+    .finally(() => {
+      src.redrawing = false;
+      if (src.redrawAgain) {
+        src.redrawAgain = false;
+        drawComposite(src, renderer);
+      }
+    });
 }

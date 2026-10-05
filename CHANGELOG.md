@@ -15,9 +15,13 @@
 - Files that cannot be read are skipped and counted. A folder that has gone, or a refused
   permission, gets a clear message and **Choose again**.
 - The wall makes a picture's source, and reads its file, only when the picture comes up, and lets
-  everything go again (texture, video element, object URL) once it has been shown. Pictures larger
-  than 4096 px are scaled down before upload. Shuffle and the three-portrait layout work with decks
-  of thousands.
+  everything go again (texture, video element, object URL) once it has been shown. Shuffle and the
+  three-portrait layout work with decks of thousands.
+- Pictures are decoded in a Web Worker at the size they are shown (at most 2560 px; a portrait in
+  a set at its panel's size), two at a time, and only the GPU keeps the pixels. With 520 real
+  4096 px phone photos, the longest frame during wall changes fell from 4.5 s to about 40 ms and
+  peak browser memory from about 3.5 GB to 2.5 GB. This also fixes changes that could stop for
+  good under load, because a pending `img.decode()` never finished.
 - The library grid and the music list are virtual, so 10,000 items scroll smoothly. The library has
   a search box and a count, and the picture editor stays in view at the foot of the panel.
 - Imported pictures and music work as before. Elements meant to be hidden now always are (the
