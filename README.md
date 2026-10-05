@@ -43,6 +43,9 @@ The wall opens with a set of demo pictures. Add your own in the **Library** tab.
 - **Library.** Import photos and videos with the button, or drop them anywhere on the page.
   Reorder by dragging, delete with ×. For each picture, choose *Fill* (crop, with focus and zoom)
   or *Whole image* (with a blurred surround). Videos play live on the leaves.
+- **Folder mode.** For large libraries, show thousands of photos and videos, and play thousands of
+  music tracks, straight from folders on your computer, without copying them into the browser.
+  See [Folder mode](#folder-mode) below.
 - **Three-portrait layout.** Portrait photos are shown three at a time, side by side, so they fill
   the landscape wall. Each one gets exactly four of the twelve columns.
 - **Wave patterns.** Diagonal from the top right (as filmed on the real wall), sweeps, top to
@@ -57,10 +60,61 @@ The wall opens with a set of demo pictures. Add your own in the **Library** tab.
 - **Keys.** ← → change picture · Space play/pause · 1–7 patterns · M music · F fullscreen ·
   H hide controls.
 
+## Folder mode
+
+Importing copies each file into the browser's storage. That suits a few hundred pictures, but not
+a whole photo library. Folder mode reads pictures, videos and music directly from a folder you
+choose instead. Nothing is copied or uploaded.
+
+1. In the **Library** tab, switch to **Folder** and click **Choose folder…**. Subfolders are
+   included. For music, do the same in the **Sound** tab under **Music folder**. Pictures and
+   music have separate folders.
+2. Seventh Leaf scans the folder in the background (*Scanning… 1,240 files*; you can cancel) and
+   makes a small thumbnail of each picture and video. The wall can start as soon as the scan ends;
+   thumbnails keep coming in while it runs, the ones you can see in the library first.
+3. Click **Rescan** after you add, change or delete files. Unchanged files keep their thumbnails.
+
+Hidden files and folders are skipped, and so is anything that is not a picture (jpg, jpeg, png,
+webp, gif, avif, bmp), a video (mp4, webm, mov, m4v) or music (mp3, m4a, aac, flac, ogg, opus,
+wav). Files that cannot be read are skipped and counted (*12 files could not be read*). If the
+folder has been moved, or permission to read it was refused, the panel says so and offers
+**Choose again**. Until then the wall shows your imported pictures, and the added music plays.
+
+**Remembering the folder.** Chrome, Edge and other Chromium-based browsers remember the folder.
+On a later visit, click **Reconnect folder** to allow reading it again (browsers only ask for this
+in answer to a click). Other browsers can open a folder too, but cannot remember it: choose it again
+on each visit. The index is kept, so the thumbnails do not have to be made again.
+
+**What is stored.** For each file the browser keeps a small index entry: its path in the folder,
+its size and date, its kind, its size in pixels, and a thumbnail about 256 px wide (WebP). Your
+crop and focus settings for a picture are kept there too. The files themselves are never stored,
+and nothing leaves your computer. **Forget this folder** removes the index.
+
+### How large libraries are handled
+
+- **Nothing is prepared for the whole library.** The wall knows each item only by its index entry.
+  A picture's file is read when the picture is about to be shown, or picked as one of the
+  in-between leaves. Before each change about ten pictures are loaded, and at most about 18 stay
+  on the GPU. The rest are released, with their object URLs. Three-portrait sets are put together
+  only when they come up, so shuffle and the three-portrait layout work with any number of
+  pictures.
+- **Pictures larger than 4096 px** are scaled down before they are uploaded to the GPU.
+- **Thumbnails** are made in a Web Worker, two or three at a time, straight from the file at
+  reduced size (`createImageBitmap` with `resizeWidth`). Video thumbnails are a frame near 1 s,
+  made one at a time when the page is idle.
+- **The library grid and the music list are virtual.** Only the rows in view are in the page, so
+  10,000 items scroll as smoothly as 10. Search by name to find a picture.
+- **Music** is read one track at a time: only the track that is playing has an object URL.
+
+`tools/test-folder-mode.html` tests all of this without a folder picker. It fills the browser's
+private file system with a few thousand generated pictures, videos and sounds, then scans, rescans,
+flips the wall, scrolls the grid and plays the music, and reports what it measured. Open it from
+your local web server in Chrome or Edge and press **Run**.
+
 ## Your own picture folder (optional)
 
-Besides importing in the browser, you can point the wall at a folder of pictures. Create
-`local/deck.json` next to `index.html`:
+Besides importing in the browser and folder mode, you can also list pictures for the wall in a
+file. Create `local/deck.json` next to `index.html`:
 
 ```json
 { "name": "My pictures", "items": [ { "file": "deck/one.jpg", "name": "One" } ] }
@@ -96,14 +150,19 @@ No build tools and one dependency, three.js, which is included in `vendor/`.
 | `src/sequencer.js` | Timing: a queue of leaves for every cell, the wave patterns, the measured leaf motion and the settling swing. |
 | `src/audio.js` | The flip-sound synthesis and the mixer (flips, room echo, music, video). |
 | `src/library.js` | Pictures, videos and music stored in the browser (IndexedDB), the picture folder, and loading pictures only when they are needed. |
+| `src/folder.js` | Folder mode: choosing and remembering folders, scanning, the index, thumbnails. |
+| `src/thumb-worker.js` | Makes folder thumbnails off the main thread. |
+| `src/virtual.js` | The virtual list behind the library grid and the music list. |
 | `src/main.js` | Interface, slideshow and music player. |
 | `src/i18n.js` | Interface text in English, Chinese and Japanese. |
 | `tools/demo-pictures.html` | Draws the demo pictures. Open it in a browser to see them. |
+| `tools/test-folder-mode.html` | Tests folder mode with a generated library (see [Folder mode](#folder-mode)). |
 
 ## Browser support
 
 Developed and tested in Chromium-based browsers (Chrome, Edge). Firefox and Safari are not yet
-tested; reports are very welcome.
+tested; reports are very welcome. Only Chromium-based browsers can remember a folder between
+visits; the others choose it again each time.
 
 ## Licence
 

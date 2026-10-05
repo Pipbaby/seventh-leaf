@@ -5,20 +5,25 @@
 import * as THREE from '../vendor/three/three.module.min.js';
 import { WALL_ASPECT } from './wall.js';
 
-const DB = 'seventh-leaf';
+// ?test (tools/test-folder-mode.html) works in a database of its own
+export const TEST = new URLSearchParams(location.search).has('test');
+const DB = TEST ? 'seventh-leaf-test' : 'seventh-leaf';
 const OLD_DB = 'flipwall'; // the project's working name; data saved under it is moved over once
 let dbp = null;
 
+// version 2 adds folder mode: the folders, their index, and the index's thumbnails
 function openDb(name, create) {
   return new Promise((res, rej) => {
-    const q = indexedDB.open(name, 1);
+    const q = create ? indexedDB.open(name, 2) : indexedDB.open(name);
     q.onupgradeneeded = () => {
       if (!create) {
         q.transaction.abort(); // it did not exist: do not create it
         return;
       }
-      q.result.createObjectStore('items', { keyPath: 'id' });
-      q.result.createObjectStore('music', { keyPath: 'id' });
+      const d = q.result;
+      for (const s of ['items', 'music', 'folders', 'entries', 'thumbs']) {
+        if (!d.objectStoreNames.contains(s)) d.createObjectStore(s, s === 'thumbs' ? undefined : { keyPath: 'id' });
+      }
     };
     q.onsuccess = () => res(q.result);
     q.onerror = () => (create ? rej(q.error) : res(null));
@@ -38,7 +43,7 @@ try {
 // copy everything from the old database into the new one, the first time only
 async function migrate(d) {
   try {
-    if (localStorage.getItem('seventhleaf.migrated')) return;
+    if (TEST || localStorage.getItem('seventhleaf.migrated')) return;
     const old = await openDb(OLD_DB, false);
     if (old) {
       for (const store of ['items', 'music']) {
@@ -63,7 +68,7 @@ async function migrate(d) {
   }
 }
 
-function db() {
+export function db() {
   if (!dbp) {
     dbp = openDb(DB, true).then(async (d) => {
       await migrate(d);
@@ -289,30 +294,51 @@ export async function makeSource(item, renderer) {
     if (item.w && item.h) src.aspect = item.w / item.h;
     else await ensureSource(src, renderer); // older imports without a stored size
   } else {
-    const v = document.createElement('video');
-    v.src = url;
-    v.crossOrigin = 'anonymous';
-    v.playsInline = true;
-    v.preload = 'auto';
-    v.loop = item.loop !== false;
-    await new Promise((res, rej) => {
-      v.onloadeddata = res;
-      v.onerror = () => rej(new Error('Cannot play ' + item.name));
-    });
-    src.el = v;
-    src.texture = new THREE.VideoTexture(v);
-    src.texture.colorSpace = THREE.SRGBColorSpace;
-    src.texture.minFilter = THREE.LinearFilter;
-    src.aspect = v.videoWidth / v.videoHeight;
-    src.bg = BLACK;
+    await openVideo(src);
     const c = document.createElement('canvas');
     c.width = 240;
     c.height = Math.round(240 / src.aspect);
-    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    c.getContext('2d').drawImage(src.el, 0, 0, c.width, c.height);
     src.thumb = c.toDataURL('image/jpeg', 0.7);
   }
   xformFor(item, src.aspect, src.xform);
   return src;
+}
+
+// A folder item's source holds nothing at all until it comes up on the wall. Then the file is
+// read (file() → File), and on release everything goes again: texture, video element, object URL.
+// measured(w, h) hears the real size of a picture once it has been decoded.
+export function folderSource(item, file, measured) {
+  const src = { id: item.id, item, kind: item.kind, url: null, file, measured, xform: new THREE.Vector4(1, 1, 0, 0), texture: null, bg: null };
+  if (item.w && item.h) src.aspect = item.w / item.h;
+  xformFor(item, src.aspect || WALL_ASPECT, src.xform);
+  return src;
+}
+
+async function openVideo(src) {
+  const v = document.createElement('video');
+  v.src = src.url;
+  v.crossOrigin = 'anonymous';
+  v.playsInline = true;
+  v.preload = 'auto';
+  v.loop = src.item.loop !== false;
+  await new Promise((res, rej) => {
+    v.onloadeddata = res;
+    v.onerror = () => rej(new Error('Cannot play ' + src.item.name));
+  });
+  src.el = v;
+  src.texture = new THREE.VideoTexture(v);
+  src.texture.colorSpace = THREE.SRGBColorSpace;
+  src.texture.minFilter = THREE.LinearFilter;
+  src.aspect = v.videoWidth / v.videoHeight;
+  src.bg = BLACK;
+}
+
+function closeVideo(v) {
+  v.pause();
+  v._fwNode?.disconnect(); // its route into the mixer goes with it
+  v.removeAttribute('src');
+  v.load();
 }
 
 export const isLoaded = (src) => !!src.texture;
@@ -333,29 +359,20 @@ export function ensureSource(src, renderer) {
       src.texture.colorSpace = THREE.SRGBColorSpace;
       src.texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
       drawComposite(src);
-    } else {
-      const img = new Image();
-      img.src = src.url;
-      await img.decode();
-      let el = img;
-      const max = Math.min(renderer.capabilities.maxTextureSize, 4096);
-      if (Math.max(img.width, img.height) > max) {
-        const k = max / Math.max(img.width, img.height);
-        el = document.createElement('canvas');
-        el.width = Math.round(img.width * k);
-        el.height = Math.round(img.height * k);
-        el.getContext('2d').drawImage(img, 0, 0, el.width, el.height);
+    } else if (src.file) {
+      // read the file only now; a failure is remembered so the item can be skipped
+      try {
+        src.url = URL.createObjectURL(await src.file());
+        if (src.kind === 'video') await openVideo(src);
+        else await loadImage(src, renderer);
+      } catch (e) {
+        src.error = e;
+        if (src.url) URL.revokeObjectURL(src.url);
+        src.url = null;
+        throw e;
       }
-      const t = new THREE.Texture(el);
-      t.needsUpdate = true;
-      t.colorSpace = THREE.SRGBColorSpace;
-      t.anisotropy = renderer.capabilities.getMaxAnisotropy();
-      t.minFilter = THREE.LinearMipmapLinearFilter;
-      src.aspect = img.width / img.height;
-      src.bg = blurredBackdrop(img, img.width, img.height);
       xformFor(src.item, src.aspect, src.xform);
-      src.texture = t;
-    }
+    } else await loadImage(src, renderer);
     src.loading = null;
     return src;
   })().catch((e) => {
@@ -365,25 +382,54 @@ export function ensureSource(src, renderer) {
   return src.loading;
 }
 
-// free a source's GPU memory; it reloads the next time it is needed (videos stay)
+// pictures larger than 4096 px (or what the GPU allows) are scaled down before they are uploaded
+async function loadImage(src, renderer) {
+  const img = new Image();
+  img.src = src.url;
+  await img.decode();
+  let el = img;
+  const max = Math.min(renderer.capabilities.maxTextureSize, 4096);
+  if (Math.max(img.width, img.height) > max) {
+    const k = max / Math.max(img.width, img.height);
+    el = document.createElement('canvas');
+    el.width = Math.round(img.width * k);
+    el.height = Math.round(img.height * k);
+    el.getContext('2d').drawImage(img, 0, 0, el.width, el.height);
+  }
+  const t = new THREE.Texture(el);
+  t.needsUpdate = true;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  src.aspect = img.width / img.height;
+  src.bg = blurredBackdrop(img, img.width, img.height);
+  xformFor(src.item, src.aspect, src.xform);
+  src.texture = t;
+  if (src.measured && (img.width !== src.item.w || img.height !== src.item.h)) src.measured(img.width, img.height);
+}
+
+// free a source's GPU memory; it reloads the next time it is needed (imported videos stay)
 export function releaseSource(src) {
-  if (!src.texture || src.el) return;
+  if (!src.texture || (src.el && !src.file)) return;
   src.texture.dispose();
   src.texture = null;
   if (src.bg && src.bg !== BLACK) src.bg.dispose();
   if (!src.composite) src.bg = null;
   if (src.composite) src.canvas = null;
+  if (src.file) {
+    if (src.el) closeVideo(src.el);
+    src.el = null;
+    URL.revokeObjectURL(src.url);
+    src.url = null;
+  }
 }
 
 export function disposeSource(src) {
+  if (src.file) return releaseSource(src);
   src.texture?.dispose();
   src.texture = null;
   if (src.bg !== BLACK) src.bg?.dispose();
-  if (src.el) {
-    src.el.pause();
-    src.el.removeAttribute('src');
-    src.el.load();
-  }
+  if (src.el) closeVideo(src.el);
   if (!src.item.url) URL.revokeObjectURL(src.url);
 }
 

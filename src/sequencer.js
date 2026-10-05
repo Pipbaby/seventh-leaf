@@ -114,12 +114,13 @@ export class Sequencer {
 
   setSources(list) {
     this.sources = list;
+    const ok = new Set(list); // a large library has thousands
     // cells pointing at a removed source fall back to the first one
     for (let i = 0; i < this.state.length; i++) {
       const s = this.state[i];
-      if (s.cur && !list.includes(s.cur)) s.cur = list[0] || null;
-      s.queue = s.queue.filter((q) => list.includes(q.src));
-      if (s.flip && (!list.includes(s.flip.from) || !list.includes(s.flip.to))) s.flip = null;
+      if (s.cur && !ok.has(s.cur)) s.cur = list[0] || null;
+      s.queue = s.queue.filter((q) => ok.has(q.src));
+      if (s.flip && (!ok.has(s.flip.from) || !ok.has(s.flip.to))) s.flip = null;
       if (!s.flip) this.#rest(i);
     }
   }

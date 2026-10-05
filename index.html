@@ -60,13 +60,24 @@
   </section>
 
   <section class="page" id="p-lib" hidden>
-    <div class="row">
-      <label class="btn"><span data-i18n="lib.import">+ Import images / videos</span><input id="import" type="file" accept="image/*,video/*" multiple hidden></label>
+    <div class="seg" id="lib-mode" role="group">
+      <button data-mode="import" data-i18n="lib.mode.import">Imported</button><button data-mode="folder" data-i18n="lib.mode.folder">Folder</button>
     </div>
-    <p class="hint" data-i18n="lib.hint">Or drop files anywhere. Click a thumbnail to show it; drag to reorder.</p>
+    <div data-show="libMode" data-when="import">
+      <div class="row">
+        <label class="btn"><span data-i18n="lib.import">+ Import images / videos</span><input id="import" type="file" accept="image/*,video/*" multiple hidden></label>
+      </div>
+      <p class="hint" data-i18n="lib.hint">Or drop files anywhere. Click a thumbnail to show it; drag to reorder.</p>
+    </div>
+    <div id="lib-folder" class="folder" data-show="libMode" data-when="folder" hidden></div>
+    <div class="row search">
+      <input id="lib-search" type="search" data-i18n-placeholder="lib.search" placeholder="Search by name">
+      <span id="lib-count" class="hint"></span>
+    </div>
     <div id="grid"></div>
     <button id="restore" class="link" hidden></button>
     <div id="editor" hidden>
+      <button id="ed-close" class="x" data-i18n-title="lib.close">×</button>
       <h3 id="ed-name"></h3>
       <p id="ed-set" class="hint" data-i18n="lib.set">Shown in a three-portrait set. Adjust its crop below.</p>
       <label id="ed-fit-row"><span data-i18n="lib.fit">Fit to wall</span> <select id="ed-fit"><option value="auto" data-i18n="lib.fit.auto">Auto</option><option value="cover" data-i18n="lib.fit.cover">Fill (crop)</option><option value="contain" data-i18n="lib.fit.contain">Whole image (blurred surround)</option></select></label>
@@ -95,9 +106,15 @@
       <button id="music-play">▶</button><button id="music-next" data-i18n-title="sound.nextTrack">⏭</button>
       <label class="check"><input id="music-shuffle" type="checkbox"> <span data-i18n="sound.shuffle">Shuffle</span></label>
     </div>
+    <div class="seg" id="music-mode" role="group">
+      <button data-mode="import" data-i18n="sound.mode.import">Added music</button><button data-mode="folder" data-i18n="sound.mode.folder">Music folder</button>
+    </div>
+    <div id="music-folder" class="folder" data-show="musicMode" data-when="folder" hidden></div>
     <ul id="music"></ul>
     <p id="music-empty" class="hint" data-i18n="sound.noMusic">No music yet.</p>
-    <label class="btn"><span data-i18n="sound.addMusic">+ Add music files</span><input id="music-add" type="file" accept="audio/*" multiple hidden></label>
+    <div data-show="musicMode" data-when="import">
+      <label class="btn"><span data-i18n="sound.addMusic">+ Add music files</span><input id="music-add" type="file" accept="audio/*" multiple hidden></label>
+    </div>
     <hr>
     <h3 data-i18n="sound.flipTitle">Flip sound</h3>
     <p class="hint"><span data-i18n="sound.now">Now:</span> <span id="flip-src"></span></p>
@@ -107,6 +124,22 @@
     </div>
   </section>
 </aside>
+
+<!-- a folder's panel in folder mode (Library tab: pictures and videos; Sound tab: music) -->
+<template id="folder-ui">
+  <p class="hint f-intro"></p>
+  <div class="row f-head"><b class="f-name"></b><span class="hint f-count"></span></div>
+  <div class="row">
+    <button class="f-choose"></button>
+    <button class="f-reconnect" data-i18n="folder.reconnect">Reconnect folder</button>
+    <button class="f-rescan" data-i18n="folder.rescan">Rescan</button>
+  </div>
+  <p class="hint f-status"></p>
+  <div class="row f-scan"><span class="hint f-progress"></span><button class="f-cancel link" data-i18n="folder.cancel">Cancel</button></div>
+  <p class="hint f-bad"></p>
+  <p class="hint f-note"></p>
+  <button class="link f-forget" data-i18n="folder.forget">Forget this folder</button>
+</template>
 
 <div id="toast"></div>
 <div id="drop" data-i18n="drop">Drop images, videos or music</div>
