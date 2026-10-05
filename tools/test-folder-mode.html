@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Seventh Leaf — folder mode test</title>
+<!--
+  Tests folder mode without a folder picker. It fills the browser's Origin Private File System
+  (navigator.storage.getDirectory()) with a few thousand small generated pictures in nested
+  subfolders, a few large ones, short generated videos and audio files, broken files, hidden files
+  and files of other kinds. It then opens the app below (index.html?test, which uses a database
+  and settings of its own) and gives it these folders through the same FileSystemDirectoryHandle
+  interface the folder picker returns. Nothing here leaves the browser.
+
+  Open it from a local web server in Chromium and press Run (or add ?auto). Options:
+  ?n=3000 number of pictures · ?keep keeps the test folders and index afterwards ·
+  ?visible keeps the app visible while scanning. By default it is hidden then (display: none; it
+  keeps running, and its frames keep coming), so that the timings show the scan's own work rather
+  than the drawing of the wall, which headless Chromium does in software (~100 ms a frame).
+  Headless: launch Chromium with --autoplay-policy=no-user-gesture-required so the music can
+  play; window.testResult holds the results when window.testDone is true.
+-->
+<style>
+  body { margin: 0; padding: 16px 20px; background: #15161a; color: #ddd; font: 13px/1.45 system-ui, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  button { font: inherit; padding: 6px 16px; }
+  #log { white-space: pre-wrap; font: 12px/1.4 ui-monospace, monospace; max-height: 300px; overflow: auto; background: #0d0e11; padding: 8px; }
+  table { border-collapse: collapse; margin: 10px 0; }
+  td, th { border: 1px solid #333; padding: 3px 8px; text-align: left; }
+  .pass { color: #6c6; } .fail { color: #e66; }
+  iframe { width: 1200px; height: 720px; border: 1px solid #333; display: block; margin-top: 12px; }
+</style>
+</head>
+<body>
+<h1>Seventh Leaf — folder mode test</h1>
+<p>Generates a test library in this browser's private file system and runs folder mode against it.</p>
+<button id="run">Run</button>
+<table id="results"></table>
+<pre id="log"></pre>
+<iframe id="app" title="Seventh Leaf"></iframe>
+<script type="module">
+const params = new URLSearchParams(location.search);
+const N = +params.get('n') || 3000;
+const BIG = 4; // pictures larger than 4096 px (shown at 2560)
+const BROKEN = 10; // .jpg files that are not pictures
+const ADD = 50; // added before the rescan
+const DELETE = 30; // deleted before the rescan
+const CHANGE = 5; // rewritten before the rescan
+
+const $ = (s) => document.querySelector(s);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const metrics = [];
+const checks = [];
+const log = (...a) => {
+  $('#log').textContent += a.join(' ') + '\n';
+  $('#log').scrollTop = 1e9;
+  console.log(...a);
+};
+const metric = (name, value, note = '') => {
+  metrics.push({ name, value, note });
+  log('·', name + ':', value, note);
+};
+const check = (name, ok, detail = '') => {
+  checks.push({ name, ok: !!ok, detail: String(detail) });
+  log(ok ? 'PASS' : 'FAIL', name, detail);
+};
+async function until(f, ms = 60000, step = 100) {
+  const t0 = performance.now();
+  while (performance.now() - t0 < ms) {
+    const v = await f();
+    if (v) return v;
+    await sleep(step);
+  }
+  return false;
+}
+const mb = (b) => (b / 1048576).toFixed(1) + ' MB';
+
+// ── the test library ────────────────────────────────────────────────────────────────────
+const dirs = new Map();
+async function dirOf(root, path) {
+  const key = root.name + '/' + path;
+  if (dirs.has(key)) return dirs.get(key);
+  let d = root;
+  for (const p of path.split('/').filter(Boolean)) d = await d.getDirectoryHandle(p, { create: true });
+  dirs.set(key, d);
+  return d;
+}
+async function write(root, path, blob) {
+  const i = path.lastIndexOf('/');
+  const d = await dirOf(root, i < 0 ? '' : path.slice(0, i));
+  const w = await (await d.getFileHandle(path.slice(i + 1), { create: true })).createWritable();
+  await w.write(blob);
+  await w.close();
+}
+async function remove(root, path) {
+  const i = path.lastIndexOf('/');
+  await (await dirOf(root, path.slice(0, i))).removeEntry(path.slice(i + 1));
+}
+
+function picture(i, w, h, type, quality = 0.8) {
+  const c = new OffscreenCanvas(w, h);
+  const g = c.getContext('2d');
+  const hue = (i * 37) % 360;
+  const grd = g.createLinearGradient(0, 0, w, h);
+  grd.addColorStop(0, `hsl(${hue} 70% 55%)`);
+  grd.addColorStop(1, `hsl(${(hue + 140) % 360} 60% 22%)`);
+  g.fillStyle = grd;
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = '#fff';
+  g.font = `bold ${Math.round(Math.min(w, h) / 4)}px sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(String(i), w / 2, h / 2);
+  return c.convertToBlob({ type, quality });
+}
+
+// where picture i lives, and what it is: a quarter are portraits; some PNG and WebP
+const pathOf = (i) => `${2018 + (i % 5)}/${String(1 + ((i >> 2) % 12)).padStart(2, '0')}/img-${i}.${i % 10 === 9 ? 'png' : i % 15 === 7 ? 'webp' : 'jpg'}`;
+const sizeOf = (i) => (i % 4 === 3 ? [200, 300] : [320, 200]);
+const typeOf = (path) => ({ jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' })[path.split('.').pop()];
+
+async function video(k) {
+  if (typeof MediaRecorder === 'undefined') return null;
+  const c = document.createElement('canvas');
+  c.width = 320;
+  c.height = 180;
+  const g = c.getContext('2d');
+  const rec = new MediaRecorder(c.captureStream(30), { mimeType: 'video/webm' });
+  const parts = [];
+  rec.ondataavailable = (e) => parts.push(e.data);
+  const stopped = new Promise((r) => (rec.onstop = r));
+  rec.start();
+  const t0 = performance.now();
+  while (performance.now() - t0 < 1600) {
+    const t = (performance.now() - t0) / 1600;
+    g.fillStyle = `hsl(${k * 90 + t * 120} 60% 40%)`;
+    g.fillRect(0, 0, 320, 180);
+    g.fillStyle = '#fff';
+    g.fillRect(t * 280, 70, 40, 40);
+    await new Promise((r) => requestAnimationFrame(r));
+  }
+  rec.stop();
+  await stopped;
+  return new Blob(parts, { type: 'video/webm' });
+}
+
+// a short sine tone as a 16-bit mono WAV
+function tone(freq, seconds = 1.5, rate = 22050) {
+  const n = Math.round(seconds * rate);
+  const dv = new DataView(new ArrayBuffer(44 + n * 2));
+  const str = (o, s) => [...s].forEach((ch, i) => dv.setUint8(o + i, ch.charCodeAt(0)));
+  str(0, 'RIFF');
+  dv.setUint32(4, 36 + n * 2, true);
+  str(8, 'WAVEfmt ');
+  dv.setUint32(16, 16, true);
+  dv.setUint16(20, 1, true);
+  dv.setUint16(22, 1, true);
+  dv.setUint32(24, rate, true);
+  dv.setUint32(28, rate * 2, true);
+  dv.setUint16(32, 2, true);
+  dv.setUint16(34, 16, true);
+  str(36, 'data');
+  dv.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) dv.setInt16(44 + i * 2, Math.sin((2 * Math.PI * freq * i) / rate) * 8000 * Math.min(1, (n - i) / 2000), true);
+  return new Blob([dv.buffer], { type: 'audio/wav' });
+}
+const junk = (n, seed) => {
+  const b = new Uint8Array(n);
+  for (let i = 0; i < n; i++) b[i] = (seed * 7919 + i * 104729) % 251;
+  return new Blob([b]);
+};
+
+async function makeLibrary(base) {
+  const pics = await base.getDirectoryHandle('pictures', { create: true });
+  const tunes = await base.getDirectoryHandle('music', { create: true });
+  const t0 = performance.now();
+  for (let i = 0; i < N; i++) {
+    const p = pathOf(i);
+    await write(pics, p, await picture(i, ...sizeOf(i), typeOf(p)));
+    if (i % 250 === 0) log(`  writing pictures… ${i} / ${N}`);
+  }
+  for (let k = 0; k < BIG; k++) await write(pics, `big/large-${k}.jpg`, await picture(9000 + k, k % 2 ? 3000 : 5200, k % 2 ? 5200 : 3000, 'image/jpeg', 0.6));
+  for (let k = 0; k < BROKEN; k++) await write(pics, `broken/bad-${k}.jpg`, junk(2000 + k * 50, k));
+  let videos = 0;
+  for (let k = 0; k < 2; k++) {
+    const v = await video(k);
+    if (v?.size) await write(pics, `videos/clip-${k}.webm`, v), videos++;
+  }
+  // none of these belong in the index
+  await write(pics, '.hidden/secret.jpg', await picture(1, 64, 64, 'image/jpeg'));
+  await write(pics, '2018/.dotfile.jpg', await picture(2, 64, 64, 'image/jpeg'));
+  await write(pics, 'notes.txt', new Blob(['not a picture']));
+  await write(pics, '2019/readme.md', new Blob(['# not a picture']));
+  // music: six tones in two albums, two broken files, a hidden file and a cover picture
+  for (let k = 0; k < 6; k++) await write(tunes, `album-${k < 3 ? 'a' : 'b'}/track-${k}.wav`, tone(220 * 2 ** (k / 6)));
+  for (let k = 0; k < 2; k++) await write(tunes, `broken/bad-${k}.mp3`, junk(4000, 50 + k));
+  await write(tunes, '.hidden.wav', tone(440));
+  await write(tunes, 'album-a/cover.jpg', await picture(3, 64, 64, 'image/jpeg'));
+  metric('Test library written', `${N + BIG + BROKEN + videos} picture/video files + 8 music files`, `${((performance.now() - t0) / 1000).toFixed(1)} s`);
+  return { pics, tunes, videos };
+}
+
+// ── measuring the app ───────────────────────────────────────────────────────────────────
+// the longest gap between frames inside the app while f runs (a frozen page shows up here)
+async function frames(win, f) {
+  const gaps = [];
+  let last = win.performance.now();
+  let on = true;
+  const tick = (t) => {
+    gaps.push(t - last);
+    last = t;
+    if (on) win.requestAnimationFrame(tick);
+  };
+  win.requestAnimationFrame(tick);
+  const out = await f();
+  on = false;
+  gaps.sort((a, b) => a - b);
+  return { out, max: gaps.at(-1) || 0, p95: gaps[Math.floor(gaps.length * 0.95)] || 0, n: gaps.length };
+}
+
+async function run() {
+  $('#run').disabled = true;
+  const root = await navigator.storage.getDirectory();
+  try {
+    await root.removeEntry('seventh-leaf-test', { recursive: true });
+  } catch {}
+  const base = await root.getDirectoryHandle('seventh-leaf-test', { create: true });
+  log(`Writing the test library (${N} pictures)…`);
+  const { pics, tunes, videos } = await makeLibrary(base);
+  const MEDIA = N + BIG + BROKEN + videos;
+
+  // the app, with a fresh test database
+  indexedDB.deleteDatabase('seventh-leaf-test');
+  localStorage.removeItem('seventhleaf.settings.test');
+  const frame = $('#app');
+  frame.src = '../index.html?test';
+  await new Promise((r) => (frame.onload = r));
+  const win = frame.contentWindow;
+  const doc = frame.contentDocument;
+  const sl = await until(() => win.seventhLeaf, 30000);
+  check('App loaded', !!sl);
+  // count the object URLs the app holds from here on
+  const urls = new Set();
+  const U = win.URL;
+  const make = U.createObjectURL.bind(U);
+  const revoke = U.revokeObjectURL.bind(U);
+  U.createObjectURL = (o) => {
+    const u = make(o);
+    urls.add(u);
+    return u;
+  };
+  U.revokeObjectURL = (u) => {
+    urls.delete(u);
+    revoke(u);
+  };
+  const heap = () => win.performance.memory?.usedJSHeapSize;
+  const heap0 = heap();
+  const pf = sl.folders.pictures;
+  const idleFrames = await frames(win, () => sleep(1500));
+  metric('Frame time with the app visible and idle', `${idleFrames.p95.toFixed(0)} ms (p95)`, 'for comparison with the frames below');
+  const hide = !params.has('visible');
+  if (hide) frame.style.display = 'none';
+
+  // ── 1. scan ──
+  log('\n1. Scan');
+  doc.querySelector('#lib-mode [data-mode=folder]').click();
+  doc.querySelector('.tabs [data-page=p-lib]').click();
+  let progressSeen = false;
+  const watch = setInterval(() => (progressSeen ||= /\d/.test(doc.querySelector('#lib-folder .f-progress')?.textContent || '')), 50);
+  const scan = await frames(win, () => pf.connect(pics));
+  clearInterval(watch);
+  const ms = pf.lastScan.ms;
+  check('Scan found every picture, video and broken file, and nothing else', pf.entries.length === MEDIA, `${pf.entries.length} of ${MEDIA}`);
+  check('Hidden files, hidden folders and other kinds are skipped', !pf.entries.some((e) => /(^|\/)\.|\.txt$|\.md$/.test(e.path)));
+  check('Progress is shown while scanning', progressSeen);
+  metric('Scan', `${(ms / 1000).toFixed(2)} s for ${pf.entries.length} files`, `${((ms / pf.entries.length) * 1000).toFixed(0)} ms per 1,000 files`);
+  const where = hide ? 'app hidden' : 'app visible';
+  metric('Longest frame during the scan', `${scan.max.toFixed(0)} ms`, `p95 ${scan.p95.toFixed(0)} ms over ${scan.n} frames (${where})`);
+
+  // ── 2. thumbnails and sizes ──
+  log('\n2. Thumbnails');
+  const t1 = performance.now();
+  const thumbs = await frames(win, () => until(() => pf.progress.done === pf.progress.media, 15 * 60000, 250));
+  const tms = performance.now() - t1;
+  const p = pf.progress;
+  check('Every picture and video has a thumbnail or is counted as unreadable', thumbs.out, `${p.done} / ${p.media}`);
+  check('The broken files are counted as unreadable', p.bad === BROKEN, `${p.bad} counted`);
+  check('The count is shown', doc.querySelector('#lib-folder .f-bad').textContent.includes(String(BROKEN)), doc.querySelector('#lib-folder .f-bad').textContent);
+  metric('Thumbnails', `${(tms / 1000).toFixed(1)} s for ${p.media} files`, `${((tms / p.media) * 1000).toFixed(0)} ms per 1,000 (3 at a time; videos 1 at a time)`);
+  metric('Longest frame while thumbnails were made', `${thumbs.max.toFixed(0)} ms`, `p95 ${thumbs.p95.toFixed(0)} ms (${where})`);
+  const byPath = (path) => pf.entries.find((e) => e.path === path);
+  const port = byPath(pathOf(3));
+  const big = byPath('big/large-0.jpg');
+  check('Sizes are known: a portrait', port.w === 200 && port.h === 300, `${port.w}×${port.h}`);
+  check('Sizes are known: a large picture', big.w === 5200 && big.h === 3000, `${big.w}×${big.h}`);
+  if (videos) {
+    const v = byPath('videos/clip-0.webm');
+    check('A video has a thumbnail and its size', v.thumb && v.w === 320 && v.h === 180, `${v.w}×${v.h}`);
+  }
+  const storedThumb = await new Promise((res) => {
+    const q = indexedDB.open('seventh-leaf-test');
+    q.onsuccess = () => {
+      const g = q.result.transaction('thumbs').objectStore('thumbs').get(port.id);
+      g.onsuccess = () => (res(g.result), q.result.close());
+    };
+  });
+  const tb = await createImageBitmap(storedThumb);
+  check('Thumbnails are small WebP pictures, 256 px wide', storedThumb.type === 'image/webp' && tb.width === 256, `${storedThumb.type}, ${tb.width}×${tb.height}, ${storedThumb.size} bytes`);
+  check('No full files are stored in the index', !pf.entries.some((e) => Object.values(e).some((v) => v instanceof win.Blob || v instanceof Blob)));
+  await sleep(2000); // the deck is regrouped a moment after sizes arrive
+  const sets = sl.deck.filter(Array.isArray).length;
+  check('Portraits are grouped in sets of three (or two)', sets >= Math.floor(N / 4 / 3) - 2, `${sets} sets in a deck of ${sl.deck.length}`);
+  metric('JS heap', `${mb(heap0)} before the scan → ${mb(heap())} after scan and thumbnails`, 'performance.memory, this tab');
+
+  // ── 3. rescan after adding, deleting and changing files ──
+  log('\n3. Rescan');
+  const keepPaths = [pathOf(N >> 1), pathOf((N >> 1) + 1), pathOf(N - 3)];
+  const before = keepPaths.map(byPath);
+  const total0 = pf.entries.length;
+  for (let k = 0; k < ADD; k++) await write(pics, `new/added-${k}.jpg`, await picture(20000 + k, 320, 200, 'image/jpeg'));
+  for (let i = 0; i < DELETE; i++) await remove(pics, pathOf(i));
+  await sleep(20); // so a rewritten file's date differs
+  for (let i = 100; i < 100 + CHANGE; i++) await write(pics, pathOf(i), await picture(i + 50000, 330, 210, typeOf(pathOf(i))));
+  await pf.rescan();
+  check('Rescan: new files added, deleted ones dropped', pf.entries.length === total0 + ADD - DELETE, `${total0} → ${pf.entries.length}`);
+  check('Rescan: unchanged entries are reused with their thumbnails', keepPaths.every((path, k) => byPath(path) === before[k] && before[k].thumb));
+  check('Rescan: deleted files are gone', ![0, 1, 29].some((i) => byPath(pathOf(i))));
+  check('Rescan: changed files are indexed again', [100, 101, 104].every((i) => !byPath(pathOf(i)).thumb || byPath(pathOf(i)).w === 330));
+  metric('Rescan', `${(pf.lastScan.ms / 1000).toFixed(2)} s for ${pf.entries.length} files`, `${((pf.lastScan.ms / pf.entries.length) * 1000).toFixed(0)} ms per 1,000 files`);
+  await until(() => pf.progress.done === pf.progress.media, 120000, 200);
+  check('Rescan: new and changed files get thumbnails', byPath('new/added-0.jpg').thumb && byPath(pathOf(100)).w === 330);
+  frame.style.display = '';
+  await sleep(2000);
+
+  // ── 4. the wall ──
+  log('\n4. Wall');
+  Object.assign(sl.seq.opts, { flips: 4, interval: 0.16, span: 0.5, jitter: 0.05 });
+  sl.settings.auto = false;
+  let maxLoaded = 0;
+  let maxTextures = 0;
+  let maxVideos = 0;
+  let sampling = true;
+  const sample = () => {
+    const live = [...sl.live.values()];
+    maxLoaded = Math.max(maxLoaded, live.filter((s) => s.texture).length);
+    maxTextures = Math.max(maxTextures, sl.wall.renderer.info.memory.textures);
+    maxVideos = Math.max(maxVideos, live.filter((s) => s.el).length);
+    if (sampling) win.requestAnimationFrame(sample);
+  };
+  sample();
+  const change = async (f) => {
+    const t = sl.seq.lastChange.t0;
+    await f();
+    await until(() => sl.seq.lastChange.t0 !== t, 20000, 30);
+    await until(() => !sl.seq.busy, 20000, 30);
+  };
+  const shown = [];
+  const wallRun = await frames(win, async () => {
+    for (let k = 0; k < 15; k++) await change(() => sl.next()), shown.push(!!sl.seq.lastChange.to?.texture);
+    sl.settings.shuffle = true;
+    for (let k = 0; k < 15; k++) await change(() => sl.next()), shown.push(!!sl.seq.lastChange.to?.texture);
+  });
+  sl.settings.shuffle = false;
+  check('30 changes, in order and shuffled', shown.length === 30 && shown.every(Boolean), `${shown.filter(Boolean).length} shown`);
+  metric('Longest frame during the changes', `${wallRun.max.toFixed(0)} ms`, `p95 ${wallRun.p95.toFixed(0)} ms (software WebGL when headless)`);
+  // a portrait set
+  const setAt = sl.deck.findIndex(Array.isArray);
+  await change(() => sl.go(setAt));
+  const set = sl.seq.lastChange.to;
+  check('A three-portrait set shows', set?.composite && set.members.length >= 2 && set.texture, set?.item.name);
+  // a large picture goes to the GPU at 2560 px on its long side, as imports are stored
+  const bigChange = await frames(win, () => change(() => sl.go(sl.deck.findIndex((e) => e.path === 'big/large-0.jpg'))));
+  const large = sl.seq.lastChange.to;
+  metric('Longest frame while a 5200 px picture comes up', `${bigChange.max.toFixed(0)} ms`, `p95 ${bigChange.p95.toFixed(0)} ms`);
+  check('A 5200 px picture is scaled to 2560 px', large?.texture?.image.width === 2560, `${large?.texture?.image.width}×${large?.texture?.image.height}`);
+  if (videos) {
+    await change(() => sl.go(sl.deck.findIndex((e) => e.path === 'videos/clip-0.webm')));
+    const v = sl.seq.lastChange.to;
+    const playing = await until(() => v.el && !v.el.paused && v.el.currentTime > 0, 5000);
+    check('A folder video plays on the wall', playing);
+    // once it is neither on the wall nor among the in-between leaves, it is released
+    for (let k = 0; k < 20 && v.el; k++) await change(() => sl.next()), sl.evict();
+    check('…and is let go (element, texture, object URL) once it is off the wall', !v.el && !v.texture && !v.url);
+  }
+  // a file deleted after the scan is skipped and counted
+  const bad0 = pf.progress.bad;
+  let vn = Math.floor((N * 2) / 3); // a landscape picture that is not loaded (so the file has to be read)
+  while (vn % 4 === 3 || sl.live.get(byPath(pathOf(vn)).id)?.texture) vn++;
+  const victim = pathOf(vn);
+  await remove(pics, victim);
+  const vi = sl.deck.findIndex((e) => e.path === victim);
+  await change(() => sl.go(vi));
+  check('A file that has gone is skipped, and counted', byPath(victim).bad && pf.progress.bad === bad0 + 1 && sl.seq.lastChange.to?.texture, sl.seq.lastChange.to?.item.name);
+  sampling = false;
+  // 18 kept, plus what is in use: the pool of ten, and a set's members alongside the set
+  check('The number of loaded pictures stays bounded', maxLoaded <= 40, `largest number of loaded sources: ${maxLoaded}`);
+  metric('Largest number of loaded sources', maxLoaded, 'pictures, sets and videos with a GPU texture (limit 18, plus what is on the wall and in the pool)');
+  metric('Largest number of textures (three.js)', maxTextures, 'renderer.info.memory.textures: sources, blurred surrounds, the wall itself');
+  metric('Largest number of open video elements', maxVideos);
+  metric('Sources in memory after the wall test', sl.live.size, `of ${sl.deck.length} deck entries (made only as they come up)`);
+  metric('JS heap after the wall test', mb(heap()));
+
+  // ── 5. the grid ──
+  log('\n5. Grid');
+  const page = doc.querySelector('#p-lib');
+  const gridEl = doc.querySelector('#grid');
+  let maxCards = 0;
+  // the grid's own work per scroll step, apart from drawing the wall
+  const layoutMs = [];
+  const layout = sl.grid.layout;
+  sl.grid.layout = function (all) {
+    const t = win.performance.now();
+    layout.call(this, all);
+    layoutMs.push(win.performance.now() - t);
+  };
+  const scroll = await frames(win, async () => {
+    const H = page.scrollHeight - page.clientHeight;
+    for (let k = 0; k <= 120; k++) {
+      page.scrollTop = (H * k) / 120;
+      await new Promise((r) => win.requestAnimationFrame(r));
+      maxCards = Math.max(maxCards, gridEl.children.length);
+    }
+  });
+  const rows = Math.ceil(sl.items.length / 3);
+  const lastCard = [...gridEl.children].reduce((m, c) => Math.max(m, parseFloat(c.style.top)), 0);
+  check('The grid scrolls through every item', parseFloat(gridEl.style.height) >= rows * 80 && lastCard >= (rows - 1) * 80, `grid ${gridEl.style.height} tall, ${rows} rows, last row shown at ${lastCard}px`);
+  check('Only the thumbnails in view exist in the page', maxCards < 80, `at most ${maxCards} cards for ${sl.items.length} items`);
+  sl.grid.layout = layout;
+  layoutMs.sort((a, b) => a - b);
+  metric('Grid scrolling', `layout ${layoutMs.at(-1).toFixed(1)} ms at most, ${layoutMs[layoutMs.length >> 1].toFixed(1)} ms median`, `${layoutMs.length} layouts over ${sl.items.length} items; whole frames (with the wall) p95 ${scroll.p95.toFixed(0)} ms`);
+  page.scrollTop = page.scrollHeight / 2;
+  const shownImgs = await until(() => {
+    const cards = [...gridEl.children].filter((c) => c.getBoundingClientRect().bottom > page.getBoundingClientRect().top && c.getBoundingClientRect().top < page.getBoundingClientRect().bottom);
+    return cards.length && cards.every((c) => c.querySelector('img').naturalWidth > 0) && cards.length;
+  }, 5000);
+  check('Thumbnails in view are shown', shownImgs, `${shownImgs} cards in view`);
+  const search = doc.querySelector('#lib-search');
+  search.value = 'new/added';
+  search.dispatchEvent(new win.Event('input'));
+  await sleep(100);
+  const countText = doc.querySelector('#lib-count').textContent;
+  check('Search by name, with a count', countText.startsWith(String(ADD) + ' '), countText);
+  search.value = '';
+  search.dispatchEvent(new win.Event('input'));
+
+  // ── 6. music ──
+  log('\n6. Music');
+  doc.querySelector('.tabs [data-page=p-sound]').click();
+  doc.querySelector('#music-mode [data-mode=folder]').click();
+  const mf = sl.folders.music;
+  await mf.connect(tunes);
+  check('Music folder: tracks indexed (hidden files and pictures skipped)', mf.entries.length === 8, mf.entries.map((e) => e.path).join(', '));
+  await until(() => sl.music.list.length === 8, 3000);
+  const el = sl.music.el;
+  el.muted = true;
+  sl.settings.musicShuffle = false;
+  const played = new Set();
+  const trackUrls = new Set();
+  const onPlaying = () => (played.add(sl.music.list[sl.music.i]?.path), trackUrls.add(el.src));
+  el.addEventListener('playing', onPlaying);
+  sl.musicPlay(0);
+  await until(() => played.size >= 1, 5000);
+  for (let k = 0; k < 8; k++) {
+    const n = played.size;
+    sl.musicNext();
+    await until(() => played.size > n || mf.progress.bad >= 2, 5000);
+  }
+  await until(() => played.size >= 6, 5000);
+  check('Every track plays, one after another', played.size === 6, [...played].join(', '));
+  check('Tracks that cannot be played are skipped and counted', mf.progress.bad === 2, `${mf.progress.bad} counted`);
+  await until(() => trackUrls.has(el.src), 5000); // the last track asked for has started
+  const musicUrls = [...urls].filter((u) => trackUrls.has(u));
+  check('Only the current track has an object URL', musicUrls.length === 1 && musicUrls[0] === el.src, `${musicUrls.length} of ${trackUrls.size} track URLs alive`);
+  sl.settings.musicShuffle = true;
+  let changes = 0;
+  for (let k = 0; k < 10; k++) {
+    const src = el.src;
+    sl.musicNext();
+    if (await until(() => el.src !== src && !el.paused, 5000)) changes++;
+  }
+  check('Shuffle and next', changes === 10, `${changes} of 10`);
+  el.removeEventListener('playing', onPlaying);
+  el.pause();
+  check('Music list is virtual too', doc.querySelectorAll('#music li').length <= sl.music.list.length);
+  metric('Object URLs held by the app at the end', urls.size, 'thumbnails cached for the grid (≤ 400), loaded folder pictures, the current track');
+
+  // ── 7. a folder that has gone ──
+  log('\n7. Missing folder');
+  const spare = await base.getDirectoryHandle('gone', { create: true });
+  await write(spare, 'a.jpg', await picture(1, 64, 64, 'image/jpeg'));
+  await mf.connect(spare); // as a "music" folder: it has no music
+  await sleep(100);
+  check('A folder without music says so', mf.entries.length === 0 && /No music/.test(doc.querySelector('#music-folder .f-status').textContent));
+  await base.removeEntry('gone', { recursive: true });
+  await mf.rescan();
+  await sleep(100);
+  check('A missing folder shows a clear message and "Choose again"', mf.state === 'missing' && !doc.querySelector('#music-folder .f-status').hidden && /again|重新|選び直す/i.test(doc.querySelector('#music-folder .f-choose').textContent), doc.querySelector('#music-folder .f-status').textContent);
+
+  // ── results ──
+  const failed = checks.filter((c) => !c.ok).length;
+  log(`\n${checks.length - failed} of ${checks.length} checks passed.`);
+  $('#results').innerHTML =
+    '<tr><th>Measured</th><th></th><th></th></tr>' +
+    metrics.map((m) => `<tr><td>${m.name}</td><td>${m.value}</td><td>${m.note}</td></tr>`).join('') +
+    '<tr><th>Check</th><th></th><th></th></tr>' +
+    checks.map((c) => `<tr><td>${c.name}</td><td class="${c.ok ? 'pass' : 'fail'}">${c.ok ? 'pass' : 'FAIL'}</td><td>${c.detail}</td></tr>`).join('');
+  window.testResult = { n: N, metrics, checks, passed: checks.length - failed, failed };
+
+  if (!params.has('keep')) {
+    await pf.forget();
+    await mf.forget();
+    frame.src = 'about:blank';
+    await sleep(200);
+    indexedDB.deleteDatabase('seventh-leaf-test');
+    localStorage.removeItem('seventhleaf.settings.test');
+    await root.removeEntry('seventh-leaf-test', { recursive: true });
+    log('Test folders and index removed (add ?keep to keep them).');
+  }
+  window.testDone = true;
+  $('#run').disabled = false;
+}
+
+$('#run').onclick = () =>
+  run().catch((e) => {
+    log('ERROR', e.stack || e);
+    window.testResult = { error: String(e.stack || e), metrics, checks };
+    window.testDone = true;
+  });
+if (params.has('auto')) $('#run').click();
+</script>
+</body>
+</html>
