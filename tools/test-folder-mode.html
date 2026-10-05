@@ -362,6 +362,28 @@ async function run() {
   sl.settings.shuffle = false;
   check('30 changes, in order and shuffled', shown.length === 30 && shown.every(Boolean), `${shown.filter(Boolean).length} shown`);
   metric('Longest frame during the changes', `${wallRun.max.toFixed(0)} ms`, `p95 ${wallRun.p95.toFixed(0)} ms (software WebGL when headless)`);
+  // automatic changes through a shuffled deck: each one is asked for once and then shown (asking
+  // again every frame while pictures loaded abandoned every change, and the wall never moved)
+  Object.assign(sl.settings, { auto: true, hold: 0.5, shuffle: true });
+  let asked = 0;
+  let autoChanges = 0;
+  let lastIdx = sl.index;
+  let lastT0 = sl.seq.lastChange.t0;
+  let counting = true;
+  const count = () => {
+    if (sl.index !== lastIdx) (asked++, (lastIdx = sl.index));
+    if (sl.seq.lastChange.t0 !== lastT0) (autoChanges++, (lastT0 = sl.seq.lastChange.t0));
+    if (counting) win.requestAnimationFrame(count);
+  };
+  // the wall changes by itself only once Start has been pressed (it starts the sound, then a change)
+  await change(() => (doc.querySelector('#start') ? doc.querySelector('#start').click() : sl.next()));
+  count();
+  await sleep(15000);
+  counting = false;
+  Object.assign(sl.settings, { auto: false, shuffle: false });
+  await sleep(3000);
+  await until(() => !sl.seq.busy, 20000, 30);
+  check('Automatic changes happen, each asked for once', autoChanges >= 2 && asked <= autoChanges + 1, `${autoChanges} changes for ${asked} requests in 15 s`);
   // a portrait set
   const setAt = sl.deck.findIndex(Array.isArray);
   await change(() => sl.go(setAt));

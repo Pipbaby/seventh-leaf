@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.1 — automatic changes with large folders
+
+- Fixed: with a large folder (for example 1,000 PNGs in subfolders, many of them in three-portrait
+  sets), the wall could stop changing for good while the title kept moving on. When it was time
+  for the next picture, the wall asked for it again on every frame until the change began, and
+  each request abandoned the one before, so a change that took longer than a frame to prepare
+  never started. It now asks once, and schedules the next change when this one starts.
+- Pictures being prepared for a change are no longer released by the memory clean-up before the
+  change starts, which could leave cells blank.
+- `tools/test-folder-mode.html` checks automatic changes too (38 checks).
+
 ## 0.2.0 — folder mode for large libraries
 
 - **Folder mode.** Show thousands of photos and videos, and play thousands of music tracks,
