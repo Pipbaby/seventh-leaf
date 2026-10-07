@@ -113,8 +113,9 @@ export async function listItems() {
   const meta = store('seventhleaf.localMeta', {});
   let local = [];
   try {
-    // a private local/ folder only exists when running on your own computer
-    const onThisComputer = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+    // a private local/ folder only exists when running on your own computer (the Android app is
+    // served from localhost too, but never carries it)
+    const onThisComputer = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname) && !window.Capacitor;
     let dir = 'local';
     let deck = onThisComputer ? await fetch('local/deck.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null;
     if (!deck) {

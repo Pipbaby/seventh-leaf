@@ -7,6 +7,8 @@ import { Folder, canRemember } from './folder.js';
 import { VirtualList } from './virtual.js';
 
 const $ = (s) => document.querySelector(s);
+// inside the Android app only: its back gesture and other native glue
+if (window.Capacitor?.isNativePlatform()) import('./android.js');
 const canvas = $('#wall');
 const wall = new Wall(canvas);
 let sound = null;

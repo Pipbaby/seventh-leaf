@@ -1,0 +1,19 @@
+{
+  "name": "seventh-leaf-android",
+  "private": true,
+  "description": "Android shell for Seventh Leaf (see docs/ANDROID.md)",
+  "license": "SEE LICENSE IN ../LICENSE",
+  "type": "module",
+  "scripts": {
+    "assemble": "node scripts/assemble-web.mjs",
+    "sync": "node scripts/assemble-web.mjs && cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2"
+  }
+}
