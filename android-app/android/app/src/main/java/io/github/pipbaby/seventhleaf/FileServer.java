@@ -31,6 +31,10 @@ import java.util.concurrent.ConcurrentHashMap;
 class FileServer extends BridgeWebViewClient {
 
     private static final String PREFIX = "/_sl/";
+    // An open range (bytes=a-) is answered with at most this much, as HTTP allows: the video player
+    // asks for the next part itself. Streaming the rest of a large video in one response made the
+    // player wait (and time out) when it needed the index at the end of an MP4.
+    private static final long RANGE_MAX = 8L << 20;
     // document ids by path, per folder: filled while listing, looked up when a file is asked for
     private static final Map<String, Map<String, String>> PATHS = new ConcurrentHashMap<>();
 
@@ -103,7 +107,7 @@ class FileServer extends BridgeWebViewClient {
                 to = size - 1;
             } else {
                 from = Long.parseLong(ab[0]);
-                to = ab.length > 1 && !ab[1].isEmpty() ? Math.min(Long.parseLong(ab[1]), size - 1) : size - 1;
+                to = ab.length > 1 && !ab[1].isEmpty() ? Math.min(Long.parseLong(ab[1]), size - 1) : Math.min(from + RANGE_MAX, size) - 1;
             }
         } catch (NumberFormatException e) {
             from = 0;

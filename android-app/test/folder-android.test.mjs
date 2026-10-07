@@ -273,3 +273,24 @@ test('closing the picker without a folder changes nothing', async () => {
   assert.equal(f.state, 'none');
   assert.equal(f.roots.length, 0);
 });
+
+test('a video thumbnail that times out is tried again at the next scan, not counted as unreadable', async () => {
+  const f = make();
+  let slow = true;
+  f.frame = async () => {
+    if (slow) throw Object.assign(new Error('timed out'), { timedOut: true });
+    return { blob: new Blob(['v']), w: 1920, h: 1080 };
+  };
+  phone.next.push(phone.folders.pic000000002);
+  await f.choose();
+  await settle(f);
+  const clip = f.entries.find((e) => e.name === 'clip');
+  assert.ok(!clip.bad && !clip.thumb, 'neither unreadable nor done');
+  assert.equal(f.progress.bad, 0);
+  assert.equal(f.progress.done, f.progress.media, 'the first index still finishes');
+
+  slow = false;
+  await f.rescan();
+  await settle(f);
+  assert.ok(f.entries.find((e) => e.name === 'clip').thumb, 'made at the next scan');
+});

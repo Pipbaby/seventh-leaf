@@ -141,6 +141,17 @@ Each stage is one pull request. "Done when" is what Mel checks on the phone.
   120 Hz; some phones hold apps at 60 Hz unless the window asks for a higher rate.
 - Tune decode concurrency and memory for the phone; cap the thumbnail cache.
 - realme's battery management can stop apps in the background: the app should resume cleanly after that.
+- Fix `THREE.WebGLState: TypeError: Failed to execute 'texSubImage2D' … Overload resolution failed` (7 times in
+  10 minutes on the phone, and on the desktop too). What is uploaded there is a released source's texture.
+  `evict()` in `src/main.js` releases sources the wall no longer needs (`lib.releaseSource()` disposes the
+  texture and its blurred surround), but a cell still showing that source as an in-between leaf keeps the
+  texture objects in its material's `map` and `bg` uniforms (`Wall.assign()` copies them in). three.js then
+  sees a disposed texture in use and uploads it again, and its `image` is by then only the
+  `{ width, height }` placeholder that `upload()` in `src/library.js` leaves, which `texSubImage2D` refuses.
+  Found by marking released textures and checking the
+  materials before each frame (in `tools/test-folder-mode.html`: map and bg of pictures, sets and a video).
+  The fix: do not release a source any cell still shows (count the cells' sources in `inUse()`), or point
+  those cells at a loaded source when it is released.
 - **Done when**: an hour of the wall with the screen on stays smooth and does not overheat the phone.
 
 ### Stage 6: sharing with friends

@@ -379,7 +379,13 @@ async function openVideo(src) {
   v.loop = src.item.loop !== false;
   await new Promise((res, rej) => {
     v.onloadeddata = res;
-    v.onerror = () => rej(new Error('Cannot play ' + src.item.name));
+    // the media error says why; a read that failed or stopped (a busy phone) is worth another try
+    v.onerror = () => {
+      const m = v.error;
+      const e = new Error(`Cannot play ${src.item.name}` + (m ? ` (${m.code}${m.message ? ': ' + m.message : ''})` : ''));
+      e.retry = m?.code === MediaError.MEDIA_ERR_NETWORK || m?.code === MediaError.MEDIA_ERR_ABORTED;
+      rej(e);
+    };
   });
   src.el = v;
   src.texture = new THREE.VideoTexture(v);
@@ -410,6 +416,7 @@ export function ensureSource(src, renderer) {
       src.texture = t;
     } else if (src.file) {
       // read the file only now; a failure is remembered so the item can be skipped
+      src.error = null;
       try {
         if (src.kind === 'video') {
           src.url = src.link ? src.link() : URL.createObjectURL(await src.file());

@@ -310,10 +310,12 @@ async function go(i, origin, skips = 0) {
   await ensure(pool);
   if (token !== goToken) return; // a newer change was asked for meanwhile
   pending = [];
-  // folder files that cannot be read are skipped (and counted); the next picture is tried instead
+  // folder files that cannot be read are skipped (and counted); the next picture is tried instead.
+  // One whose read failed or stopped (MEDIA_ERR_NETWORK, a busy phone) is skipped now but not
+  // counted: it comes up again later.
   const failed = pool.filter((s) => !lib.isLoaded(s) && (s.members || [s]).some((m) => m.error));
   if (failed.length) {
-    for (const s of failed) for (const m of s.members || [s]) if (m.error) folders[m.item.folder]?.markBad(m.item);
+    for (const s of failed) for (const m of s.members || [s]) if (m.error && !m.error.retry) folders[m.item.folder]?.markBad(m.item);
     if (failed.includes(target)) {
       if (skips < 20) return go(pickNext(), origin, skips + 1);
       return scheduleNext(now()); // try again after the usual hold

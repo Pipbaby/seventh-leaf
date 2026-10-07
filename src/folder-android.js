@@ -192,8 +192,9 @@ export class AndroidFolder extends Folder {
     return r.blob();
   }
 
+  // a phone reads a large video slowly while it also makes picture thumbnails: give it a minute
   frame(e) {
-    return videoFrame(this.url(e), this.thumbHeight);
+    return videoFrame(this.url(e), this.thumbHeight, 60000);
   }
 
   // a file of a folder that is not readable now is not bad: it comes back with its folder

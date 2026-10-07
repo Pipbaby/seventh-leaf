@@ -75,9 +75,10 @@ export class Folder {
     this.inflight = 0;
     this.videoBusy = false;
     this.jobs = new Map();
+    this.later = new Set(); // timed out: tried again at the next scan, not counted as unreadable
   }
 
-  // f(what, entry): 'state' | 'scan' | 'entries' | 'thumb' | 'size' | 'bad'
+  // f(what, entry): 'state' | 'scan' | 'entries' | 'thumb' | 'size' | 'bad' | 'later'
   on(f) {
     this.listeners.push(f);
   }
@@ -102,7 +103,7 @@ export class Folder {
       if (e.bad) bad++;
       if (e.kind === 'audio') continue;
       media++;
-      if (e.thumb || e.bad) done++;
+      if (e.thumb || e.bad || this.later.has(e.id)) done++;
     }
     return { files: this.entries.length, media, done, bad };
   }
@@ -223,6 +224,7 @@ export class Folder {
     if (!this.ready) return;
     await this.stopScan();
     const job = { n: 0, cancelled: false, t0: performance.now() };
+    this.later.clear();
     this.scanning = job;
     this.emit('scan');
     this.scanDone = this.#scan(job).finally(() => {
@@ -391,7 +393,7 @@ export class Folder {
   }
 
   #needs(e) {
-    return !e.thumb && !e.bad && !this.busy.has(e.id);
+    return !e.thumb && !e.bad && !this.busy.has(e.id) && !this.later.has(e.id);
   }
 
   #next(kind) {
@@ -461,7 +463,7 @@ export class Folder {
     try {
       r = await this.frame(e);
     } catch (err) {
-      r = { error: String(err) };
+      r = { error: String(err), timedOut: err.timedOut };
     }
     this.videoBusy = false;
     this.busy.delete(e.id);
@@ -476,6 +478,13 @@ export class Folder {
 
   #done(e, r) {
     if (this.byId.get(e.id) !== e) return; // the file changed or went meanwhile
+    if (r.timedOut) {
+      // slow to read now (a large video, a busy phone) is not unreadable: the next scan tries again
+      console.warn('Timed out reading', e.path, '- trying again at the next scan');
+      this.later.add(e.id);
+      this.emit('later', e);
+      return;
+    }
     if (r.error) {
       console.warn('Cannot read', e.path, r.error);
       return this.markBad(e);
@@ -509,17 +518,17 @@ export class Folder {
 }
 
 // a frame near 1 s into a video, 256 px wide (and at most maxHeight tall), and the video's size.
-// source: a File, or a URL the video can be played from
-export async function videoFrame(source, maxHeight = Infinity) {
+// source: a File, or a URL the video can be played from; ms: how long each step may take
+export async function videoFrame(source, maxHeight = Infinity, ms = 10000) {
   const url = typeof source === 'string' ? source : URL.createObjectURL(source);
   const v = document.createElement('video');
   v.muted = true;
   v.preload = 'auto';
   v.src = url;
   try {
-    await event(v, 'loadedmetadata');
+    await event(v, 'loadedmetadata', ms);
     v.currentTime = Math.min(1, (v.duration || 0) / 2);
-    await event(v, 'seeked');
+    await event(v, 'seeked', ms);
     if (!v.videoWidth) throw new Error('no picture');
     const c = document.createElement('canvas');
     const scale = Math.min(256 / v.videoWidth, maxHeight / v.videoHeight);
@@ -537,7 +546,7 @@ export async function videoFrame(source, maxHeight = Infinity) {
 
 function event(el, name, ms = 10000) {
   return new Promise((res, rej) => {
-    const t = setTimeout(() => rej(new Error('timed out')), ms);
+    const t = setTimeout(() => rej(Object.assign(new Error('timed out'), { timedOut: true })), ms);
     el.addEventListener(name, () => (clearTimeout(t), res()), { once: true });
     el.addEventListener('error', () => (clearTimeout(t), rej(new Error('cannot decode'))), { once: true });
   });
