@@ -361,9 +361,10 @@ export async function makeSource(item, renderer) {
 
 // A folder item's source holds nothing at all until it comes up on the wall. Then the file is
 // read (file() → File), and on release everything goes again: texture, video element, object URL.
-// measured(w, h) hears the real size of a picture once it has been decoded.
-export function folderSource(item, file, measured) {
-  const src = { id: item.id, item, kind: item.kind, url: null, file, measured, xform: new THREE.Vector4(1, 1, 0, 0), texture: null, bg: null };
+// measured(w, h) hears the real size of a picture once it has been decoded. link(), where there is
+// one, gives a URL a video can play from without reading the whole file first (the Android app).
+export function folderSource(item, file, measured, link) {
+  const src = { id: item.id, item, kind: item.kind, url: null, file, measured, link, xform: new THREE.Vector4(1, 1, 0, 0), texture: null, bg: null };
   if (item.w && item.h) src.aspect = item.w / item.h;
   xformFor(item, src.aspect || WALL_ASPECT, src.xform);
   return src;
@@ -378,7 +379,13 @@ async function openVideo(src) {
   v.loop = src.item.loop !== false;
   await new Promise((res, rej) => {
     v.onloadeddata = res;
-    v.onerror = () => rej(new Error('Cannot play ' + src.item.name));
+    // the media error says why; a read that failed or stopped (a busy phone) is worth another try
+    v.onerror = () => {
+      const m = v.error;
+      const e = new Error(`Cannot play ${src.item.name}` + (m ? ` (${m.code}${m.message ? ': ' + m.message : ''})` : ''));
+      e.retry = m?.code === MediaError.MEDIA_ERR_NETWORK || m?.code === MediaError.MEDIA_ERR_ABORTED;
+      rej(e);
+    };
   });
   src.el = v;
   src.texture = new THREE.VideoTexture(v);
@@ -409,9 +416,10 @@ export function ensureSource(src, renderer) {
       src.texture = t;
     } else if (src.file) {
       // read the file only now; a failure is remembered so the item can be skipped
+      src.error = null;
       try {
         if (src.kind === 'video') {
-          src.url = URL.createObjectURL(await src.file());
+          src.url = src.link ? src.link() : URL.createObjectURL(await src.file());
           await openVideo(src);
         } else await loadImage(src, renderer);
       } catch (e) {

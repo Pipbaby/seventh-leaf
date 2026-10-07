@@ -84,6 +84,13 @@ body.bare #panel, body.bare #bar { display: none; }
 .folder .f-status { color: var(--text); }
 .folder .f-bad { color: #e8a23e; }
 .folder .f-scan .hint { margin: 0; }
+.folder .f-roots { list-style: none; margin: 0 0 6px; padding: 0; }
+.folder .f-roots li { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.folder .f-root { flex-wrap: nowrap; margin: 0; }
+.folder .f-rname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.folder .f-rcount { margin: 0 0 0 auto; white-space: nowrap; }
+.folder .f-root .x { padding: 0 8px; }
+.folder .f-why { margin: 4px 0; color: var(--text); }
 .search { margin: 4px 0 8px; flex-wrap: nowrap; }
 .search input { flex: 1; min-width: 0; background: #1c1c21; border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
 .search .hint { margin: 0; white-space: nowrap; }

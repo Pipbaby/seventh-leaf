@@ -1,9 +1,10 @@
 // Folder mode's thumbnails, made off the main thread: the picture is decoded straight to ~256 px
 // (createImageBitmap with resizeWidth, so a large photo is never held at full size here) and saved
 // as a small WebP. Its real size in pixels comes from the file's header where the format allows.
+// maxHeight (the Android app's) keeps tall pictures such as phone screenshots small too.
 const WIDTH = 256;
 
-onmessage = async ({ data: { id, file } }) => {
+onmessage = async ({ data: { id, file, maxHeight } }) => {
   if (typeof OffscreenCanvas === 'undefined') return postMessage({ id, fatal: true });
   try {
     const bmp = await createImageBitmap(file, { resizeWidth: WIDTH, resizeQuality: 'medium' });
@@ -11,8 +12,9 @@ onmessage = async ({ data: { id, file } }) => {
     // the decoded picture is upright (EXIF orientation applied); a header gives the size as stored
     if (size && size[0] !== size[1] && size[0] > size[1] !== bmp.width > bmp.height) size = [size[1], size[0]];
     const [w, h] = size || [bmp.width, bmp.height];
-    const c = new OffscreenCanvas(bmp.width, bmp.height);
-    c.getContext('2d').drawImage(bmp, 0, 0);
+    const scale = maxHeight ? Math.min(1, maxHeight / bmp.height) : 1;
+    const c = new OffscreenCanvas(Math.max(1, Math.round(bmp.width * scale)), Math.max(1, Math.round(bmp.height * scale)));
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
     bmp.close();
     const blob = await c.convertToBlob({ type: 'image/webp', quality: 0.75 });
     postMessage({ id, blob, w, h });

@@ -8,7 +8,8 @@ import { VirtualList } from './virtual.js';
 
 const $ = (s) => document.querySelector(s);
 // inside the Android app only: its back gesture and other native glue
-if (window.Capacitor?.isNativePlatform()) import('./android.js');
+const native = !!window.Capacitor?.isNativePlatform();
+if (native) import('./android.js');
 const canvas = $('#wall');
 const wall = new Wall(canvas);
 let sound = null;
@@ -60,7 +61,9 @@ function pick(o, keys) {
 // index of a picture folder, which may hold many thousands. The wall's deck is made of the same
 // items, a portrait set being an array of two or three. A source (what the wall's shader samples)
 // is made for a folder item only when it comes up; imported items get theirs at once, as before.
-const folders = { pictures: new Folder('pictures', ['image', 'video']), music: new Folder('music', ['audio']) };
+// In the Android app the folders are on the phone, and a slot can hold several (folder-android.js).
+const FolderKind = native ? (await import('./folder-android.js')).AndroidFolder : Folder;
+const folders = { pictures: new FolderKind('pictures', ['image', 'video']), music: new FolderKind('music', ['audio']) };
 let items = [];
 let deck = [];
 let posOf = new Map(); // item id → its place in the deck
@@ -175,7 +178,7 @@ function srcOf(e) {
   if (Array.isArray(e)) s = lib.makeComposite(e.map(srcOf), wall.renderer);
   else {
     const f = folders[e.folder];
-    s = lib.folderSource(e, () => f.file(e), (w, h) => f.setSize(e, w, h));
+    s = lib.folderSource(e, () => f.file(e), (w, h) => f.setSize(e, w, h), f.url && (() => f.url(e)));
   }
   live.set(s.id, s);
   return s;
@@ -307,10 +310,12 @@ async function go(i, origin, skips = 0) {
   await ensure(pool);
   if (token !== goToken) return; // a newer change was asked for meanwhile
   pending = [];
-  // folder files that cannot be read are skipped (and counted); the next picture is tried instead
+  // folder files that cannot be read are skipped (and counted); the next picture is tried instead.
+  // One whose read failed or stopped (MEDIA_ERR_NETWORK, a busy phone) is skipped now but not
+  // counted: it comes up again later.
   const failed = pool.filter((s) => !lib.isLoaded(s) && (s.members || [s]).some((m) => m.error));
   if (failed.length) {
-    for (const s of failed) for (const m of s.members || [s]) if (m.error) folders[m.item.folder]?.markBad(m.item);
+    for (const s of failed) for (const m of s.members || [s]) if (m.error && !m.error.retry) folders[m.item.folder]?.markBad(m.item);
     if (failed.includes(target)) {
       if (skips < 20) return go(pickNext(), origin, skips + 1);
       return scheduleNext(now()); // try again after the usual hold
@@ -421,19 +426,24 @@ async function musicPlay(i) {
   music.i = ((i % music.list.length) + music.list.length) % music.list.length;
   const m = music.list[music.i];
   const token = ++musicToken;
-  let blob = m.blob;
-  if (!blob) {
-    try {
-      blob = await folders.music.file(m);
-    } catch (e) {
-      console.warn(e);
-      if (token === musicToken) musicFailed(m);
-      return;
+  // the Android app plays a folder's track from where it serves the file
+  let url = !m.blob && folders.music.url ? folders.music.url(m) : null;
+  if (!url) {
+    let blob = m.blob;
+    if (!blob) {
+      try {
+        blob = await folders.music.file(m);
+      } catch (e) {
+        console.warn(e);
+        if (token === musicToken) musicFailed(m);
+        return;
+      }
+      if (token !== musicToken) return;
     }
-    if (token !== musicToken) return;
+    url = URL.createObjectURL(blob);
   }
   if (music.url) URL.revokeObjectURL(music.url);
-  music.url = URL.createObjectURL(blob);
+  music.url = url;
   music.el.src = music.url;
   if (sound) sound.attach(music.el, 'music');
   music.el.play().catch(() => {});
@@ -708,17 +718,20 @@ function renderFolder(f) {
   const vars = { name: f.name };
   // sentences are joined with a space in English, without one in Chinese and Japanese
   const fallback = settings[f.slot === 'music' ? 'musicMode' : 'libMode'] === 'folder' ? (getLang() === 'en' ? ' ' : '') + t('folder.fallback.' + f.slot) : '';
-  const lost = ['again', 'missing', 'denied'].includes(f.state);
+  const lost = ['again', 'missing', 'denied', 'lost'].includes(f.state);
+  const roots = f.roots; // the Android app: a slot holds several folders, listed one by one
   q('.f-intro').hidden = f.state !== 'none';
-  q('.f-intro').textContent = t('folder.intro.' + f.slot);
-  q('.f-head').hidden = f.state === 'none';
+  q('.f-intro').textContent = t('folder.intro.' + f.slot + (native ? '.phone' : ''));
+  q('.f-head').hidden = f.state === 'none' || !!roots;
+  renderRoots(f, q('.f-roots'));
   q('.f-name').textContent = '📁 ' + f.name;
   q('.f-count').textContent = t(f.slot === 'music' ? 'sound.tracks' : 'lib.count', { n: num(p.files - p.bad) });
-  q('.f-choose').textContent = t(lost ? 'folder.chooseAgain' : f.state === 'none' ? 'folder.choose' : 'folder.change');
+  q('.f-choose').textContent = t(roots ? 'folder.add' : lost ? 'folder.chooseAgain' : f.state === 'none' ? 'folder.choose' : 'folder.change');
   q('.f-reconnect').hidden = f.state !== 'reconnect';
   q('.f-rescan').hidden = !f.ready || !!f.scanning;
   let status = '';
-  if (f.state === 'reconnect') status = t('folder.reconnectHint', vars) + fallback;
+  if (f.state === 'lost') status = fallback.trim(); // each folder's row says why
+  else if (f.state === 'reconnect') status = t('folder.reconnectHint', vars) + fallback;
   else if (lost) status = t('folder.' + f.state, vars) + fallback;
   else if (f.ready && !f.scanning && !p.files) status = t('folder.empty.' + f.slot);
   q('.f-status').hidden = !status;
@@ -726,11 +739,44 @@ function renderFolder(f) {
   q('.f-scan').hidden = !f.scanning && !(f.ready && p.done < p.media);
   q('.f-progress').textContent = f.scanning ? t('folder.scanning', { n: num(f.scanning.n) }) : t('folder.thumbs', { done: num(p.done), total: num(p.media) });
   q('.f-cancel').hidden = !f.scanning;
+  q('.f-pause').hidden = !f.pause || !!f.scanning;
+  q('.f-pause').textContent = t(f.paused ? 'folder.resume' : 'folder.pause');
   q('.f-bad').hidden = !p.bad;
   q('.f-bad').textContent = t('folder.bad', { n: num(p.bad) });
-  q('.f-note').hidden = canRemember || f.state === 'none';
+  q('.f-note').hidden = canRemember || native || f.state === 'none';
   q('.f-note').textContent = t('folder.noMemory');
-  q('.f-forget').hidden = f.state === 'none';
+  q('.f-forget').hidden = f.state === 'none' || !!roots;
+}
+
+// the Android app's folders: name, files, remove, and choose again when it can no longer be read.
+// Built again only when something in it changes, so a tap is not lost to a repaint. Its class names
+// differ from the panel's own, which renderFolder() finds with querySelector().
+function renderRoots(f, ul) {
+  const rows = (f.roots || []).map((r) => ({ r, n: f.count(r) }));
+  const key = getLang() + JSON.stringify(rows.map(({ r, n }) => [r.id, r.name, r.state, n]));
+  ul.hidden = !rows.length;
+  if (ul.dataset.key === key) return;
+  ul.dataset.key = key;
+  ul.replaceChildren(
+    ...rows.map(({ r, n }) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<div class="row f-root"><b class="f-rname"></b><span class="hint f-rcount"></span><button class="x"></button></div>`;
+      li.querySelector('.f-rname').textContent = '📁 ' + r.name;
+      li.querySelector('.f-rcount').textContent = t(f.slot === 'music' ? 'sound.tracks' : 'lib.count', { n: num(n) });
+      const x = li.querySelector('.x');
+      x.textContent = '×';
+      x.title = t('folder.remove');
+      x.onclick = () => confirm(t('folder.confirmRemove', { name: r.name })) && f.remove(r);
+      if (r.state !== 'ready') {
+        const why = Object.assign(document.createElement('p'), { className: 'hint f-why' });
+        why.textContent = t(r.state === 'missing' ? 'folder.missing' : 'folder.revoked', { name: r.name });
+        const again = Object.assign(document.createElement('button'), { textContent: t('folder.chooseAgain') });
+        again.onclick = () => f.choose(r);
+        li.append(why, again);
+      }
+      return li;
+    }),
+  );
 }
 
 const painting = new Set();
@@ -750,6 +796,7 @@ for (const f of Object.values(folders)) {
   box.querySelector('.f-reconnect').onclick = () => f.reconnect();
   box.querySelector('.f-rescan').onclick = () => f.rescan();
   box.querySelector('.f-cancel').onclick = () => f.cancel();
+  box.querySelector('.f-pause').onclick = () => f.pause(!f.paused);
   box.querySelector('.f-forget').onclick = () => confirm(t('folder.confirmForget', { name: f.name })) && f.forget();
   const reload = f.slot === 'music' ? loadMusic : loadLibrary;
   f.on((what, e) => {

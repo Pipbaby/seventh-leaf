@@ -148,6 +148,31 @@ const T = {
     '此浏览器无法记住文件夹：下次访问时需要重新选择。',
     'このブラウザはフォルダを記憶できません。次に開いたときは、もう一度選び直す必要があります。',
   ],
+  // the Android app: several folders on the phone
+  'folder.intro.pictures.phone': [
+    'Show pictures and videos straight from folders on this phone, such as the camera folder or Pictures, subfolders included. Add as many folders as you like. Nothing is copied: the app keeps only a small index with thumbnails.',
+    '直接显示本机文件夹（如相机文件夹或 Pictures，含子文件夹）中的图片和视频。可以添加任意多个文件夹。不会复制任何文件：应用只保存一份带缩略图的小索引。',
+    'カメラのフォルダや Pictures など、このスマートフォンのフォルダ（サブフォルダを含む）の画像や動画をそのまま表示します。フォルダはいくつでも追加できます。ファイルのコピーは行わず、アプリにはサムネイル付きの小さな索引だけを保存します。',
+  ],
+  'folder.intro.music.phone': [
+    'Play music straight from folders on this phone, such as Music, subfolders included. Add as many folders as you like. Nothing is copied.',
+    '直接播放本机文件夹（如 Music，含子文件夹）中的音乐。可以添加任意多个文件夹。不会复制任何文件。',
+    'Music など、このスマートフォンのフォルダ（サブフォルダを含む）の音楽をそのまま再生します。フォルダはいくつでも追加できます。ファイルのコピーは行いません。',
+  ],
+  'folder.add': ['Add folder…', '添加文件夹…', 'フォルダを追加…'],
+  'folder.remove': ['Remove this folder', '移除此文件夹', 'このフォルダを外す'],
+  'folder.confirmRemove': [
+    'Remove the folder “{name}”? Its index and thumbnails are removed from the app. The files in the folder are not touched.',
+    '要移除文件夹“{name}”吗？它的索引和缩略图将从应用中删除，文件夹中的文件不受影响。',
+    'フォルダ「{name}」を外しますか？索引とサムネイルはアプリから削除されます。フォルダ内のファイルには影響しません。',
+  ],
+  'folder.revoked': [
+    'The app can no longer read “{name}”. Choose it again to show it.',
+    '应用已无法读取“{name}”。请重新选择它以显示。',
+    'アプリは「{name}」を読み込めなくなりました。表示するには選び直してください。',
+  ],
+  'folder.pause': ['Pause', '暂停', '一時停止'],
+  'folder.resume': ['Resume', '继续', '再開'],
 
   'sound.master': ['Master', '总音量', 'マスター'],
   'sound.flips': ['Flip sounds', '翻页声', 'めくり音'],
