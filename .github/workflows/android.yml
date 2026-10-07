@@ -1,0 +1,39 @@
+# Builds the Android debug APK (see docs/ANDROID.md). Download it from the run's "seventh-leaf-debug"
+# artifact.
+name: Android
+
+on:
+  pull_request:
+    paths: ['android-app/**', 'src/**', 'index.html', 'style.css', 'vendor/**', '.github/workflows/android.yml']
+  push:
+    paths: ['android-app/**', 'src/**', 'index.html', 'style.css', 'vendor/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+jobs:
+  debug-apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android-app
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: android-app/package-lock.json
+      - uses: gradle/actions/setup-gradle@v5
+      - run: npm ci
+      - run: node scripts/assemble-web.mjs
+      - run: npx cap sync android
+      - run: ./gradlew assembleDebug
+        working-directory: android-app/android
+      - uses: actions/upload-artifact@v5
+        with:
+          name: seventh-leaf-debug
+          path: android-app/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

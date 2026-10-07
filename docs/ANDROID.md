@@ -85,6 +85,9 @@ Each stage is one pull request. "Done when" is what Mel checks on the phone.
   `./gradlew assembleDebug`, and upload the APK as an artifact named `seventh-leaf-debug`.
 - **Done when**: the debug APK installs on the GT 7 Pro; the demo wall runs full screen in landscape and flips as
   it does on the desktop; the console shows no errors; the desktop version is unchanged.
+- **Build it yourself**: in `android-app/`, `npm ci`, then `npm run sync` (assembles `www/` and runs
+  `npx cap sync android`), then `./gradlew assembleDebug` in `android-app/android/`. The APK is
+  `android-app/android/app/build/outputs/apk/debug/app-debug.apk`; install it with `adb install -r`.
 
 ### Stage 2: folders on the phone
 
