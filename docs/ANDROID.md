@@ -85,7 +85,7 @@ Each stage is one pull request. "Done when" is what Mel checks on the phone.
   `./gradlew assembleDebug`, and upload the APK as an artifact named `seventh-leaf-debug`.
 - **Done when**: the debug APK installs on the GT 7 Pro; the demo wall runs full screen in landscape and flips as
   it does on the desktop; the console shows no errors; the desktop version is unchanged.
-- **Build it yourself**: in `android-app/`, `npm ci`, then `npm run sync` (assembles `www/` and runs
+- **Build it yourself**: in `android-app/`, `npm ci`, `npm test` (unit tests for `src/folder-android.js`), then `npm run sync` (assembles `www/` and runs
   `npx cap sync android`), then `./gradlew assembleDebug` in `android-app/android/`. The APK is
   `android-app/android/app/build/outputs/apk/debug/app-debug.apk`; install it with `adb install -r`.
 
@@ -100,9 +100,12 @@ Each stage is one pull request. "Done when" is what Mel checks on the phone.
   - File contents are served to the WebView at an internal URL (for example `https://localhost/_sl/<id>/<path>`)
     by intercepting the WebView's requests and streaming from the content URI, with HTTP `Range` support so
     videos can seek. No copying, and no base64 through the plugin bridge.
-- `src/folder-android.js` implements the same interface as `Folder` in `src/folder.js`. Pictures are read with
-  `fetch()` (a `Range` request for the first 256 KB where the thumbnail worker only needs the header); videos
-  and music get the internal URL as their `src`. `src/folder.js` picks this backend when running inside the app.
+- `src/folder-android.js` implements the same interface as `Folder` in `src/folder.js` (it extends it). Pictures
+  are read with `fetch()`: whole, since the thumbnail worker decodes the picture and reads its header from the
+  same file; videos and music get the internal URL as their `src`. `src/main.js` picks this backend when running
+  inside the app (`folder.js` cannot load a module that extends its own class without an import cycle).
+- A slot (pictures, music) holds as many folders as the user likes, added and removed one by one (see open
+  question 3).
 - The index and thumbnails stay in IndexedDB as on the desktop. Keep thumbnails small; if building the index
   for several thousand photos is too slow in the web workers, use Android's own thumbnails
   (`DocumentsContract.getDocumentThumbnail`) instead.
@@ -185,5 +188,7 @@ install may ask for confirmation on the phone.
 
 1. Portrait: a 7 × 12 wall, the 12 × 7 wall with controls beneath, or landscape only? (Stage 3)
 2. Music when the screen is off: stop, or keep playing? (Stage 4)
-3. Which folders first: the camera folder only, or Pictures too? (Pictures on the test phone holds many
-   screenshots and app images.) (Stage 2)
+3. ~~Which folders first: the camera folder only, or Pictures too?~~ **Answered:** the camera folder,
+   Pictures, and any other folders Mel chooses: the user adds as many folders as they like and can remove
+   them again. Because Pictures holds thousands of screenshots and app images, the first index shows its
+   progress, can be interrupted and resumed, and keeps thumbnails small. (Stage 2)

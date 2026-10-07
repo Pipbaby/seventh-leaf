@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "assemble": "node scripts/assemble-web.mjs",
-    "sync": "node scripts/assemble-web.mjs && cap sync android"
+    "sync": "node scripts/assemble-web.mjs && cap sync android",
+    "test": "node --test --test-force-exit test/*.test.mjs"
   },
   "dependencies": {
     "@capacitor/android": "8.5.2",
@@ -14,6 +15,7 @@
     "@capacitor/core": "8.5.2"
   },
   "devDependencies": {
-    "@capacitor/cli": "8.5.2"
+    "@capacitor/cli": "8.5.2",
+    "fake-indexeddb": "6.2.5"
   }
 }

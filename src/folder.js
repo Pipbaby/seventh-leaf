@@ -18,7 +18,7 @@ const THUMBS_AT_ONCE = 3;
 const URLS_KEPT = 400; // thumbnail object URLs kept for the grid
 const EDITS = ['fit', 'focus', 'zoom', 'loop', 'muted']; // kept when a file changes
 
-const kindOf = (name, kinds) => kinds.find((k) => EXT[k].test(name)) || null;
+export const kindOf = (name, kinds) => kinds.find((k) => EXT[k].test(name)) || null;
 // hidden files and folders (and macOS's ._ files) are skipped
 const visible = (path) => !path.split('/').some((p) => p.startsWith('.'));
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
@@ -26,7 +26,7 @@ const byPath = (a, b) => collator.compare(a.path, b.path);
 const range = (slot) => IDBKeyRange.bound(slot + ':', slot + ':￿');
 
 // one IndexedDB transaction over one or more stores
-async function run(stores, mode, fn) {
+export async function run(stores, mode, fn) {
   const d = await db();
   return new Promise((res, rej) => {
     const t = d.transaction(stores, mode);
@@ -50,6 +50,8 @@ const breathe = () =>
       });
 const idle = () => new Promise((r) => (window.requestIdleCallback ? requestIdleCallback(r, { timeout: 400 }) : setTimeout(r, 30)));
 
+// folder-android.js extends this class: it replaces walk(), file(), frame() and the choosing, and
+// uses emit(), stopScan(), setEntries() and pump()
 export class Folder {
   // slot: 'pictures' or 'music'; kinds: which files belong in it
   constructor(slot, kinds) {
@@ -79,7 +81,7 @@ export class Folder {
   on(f) {
     this.listeners.push(f);
   }
-  #emit(what, e) {
+  emit(what, e) {
     for (const f of this.listeners) f(what, e);
   }
 
@@ -105,7 +107,7 @@ export class Folder {
     return { files: this.entries.length, media, done, bad };
   }
 
-  #setEntries(list) {
+  setEntries(list) {
     this.entries = list.sort(byPath);
     this.byId = new Map(list.map((e) => [e.id, e]));
     this.cursor = { image: 0, video: 0 };
@@ -117,7 +119,7 @@ export class Folder {
     if (!rec) return;
     this.name = rec.name;
     this.handle = rec.handle || null;
-    this.#setEntries(await run('entries', 'readonly', (t) => t.objectStore('entries').getAll(range(this.slot))));
+    this.setEntries(await run('entries', 'readonly', (t) => t.objectStore('entries').getAll(range(this.slot))));
     if (this.handle) {
       let p = 'prompt';
       try {
@@ -125,7 +127,7 @@ export class Folder {
       } catch {}
       this.state = p === 'granted' ? 'ready' : 'reconnect';
     } else this.state = 'again';
-    this.#emit('state');
+    this.emit('state');
     if (this.ready) this.rescan();
   }
 
@@ -147,28 +149,28 @@ export class Folder {
 
   // use a directory handle (from the picker, or any other FileSystemDirectoryHandle)
   async connect(handle) {
-    await this.#stopScan();
+    await this.stopScan();
     this.handle = handle;
     this.files = null;
     this.handles = new Map();
     this.name = handle.name;
     await run('folders', 'readwrite', (t) => t.objectStore('folders').put({ id: this.slot, name: this.name, handle }));
     this.state = 'ready';
-    this.#emit('state');
+    this.emit('state');
     await this.rescan();
   }
 
   // use the files of a folder chosen with <input webkitdirectory>
   async connectFiles(files) {
     if (!files.length) return;
-    await this.#stopScan();
+    await this.stopScan();
     this.handle = null;
     this.handles = new Map();
     this.name = files[0].webkitRelativePath.split('/')[0] || '';
     this.files = new Map(files.map((f) => [f.webkitRelativePath.split('/').slice(1).join('/') || f.name, f]));
     await run('folders', 'readwrite', (t) => t.objectStore('folders').put({ id: this.slot, name: this.name }));
     this.state = 'ready';
-    this.#emit('state');
+    this.emit('state');
     await this.rescan();
   }
 
@@ -181,13 +183,13 @@ export class Folder {
       console.warn(e);
     }
     this.state = p === 'granted' ? 'ready' : 'denied';
-    this.#emit('state');
+    this.emit('state');
     if (this.ready) await this.rescan();
   }
 
   // drop the folder and its index
   async forget() {
-    await this.#stopScan();
+    await this.stopScan();
     await run(['folders', 'entries', 'thumbs'], 'readwrite', (t) => {
       t.objectStore('folders').delete(this.slot);
       t.objectStore('entries').delete(range(this.slot));
@@ -201,16 +203,16 @@ export class Folder {
     this.files = null;
     this.handles = new Map();
     this.name = '';
-    this.#setEntries([]);
+    this.setEntries([]);
     this.state = 'none';
-    this.#emit('state');
+    this.emit('state');
   }
 
   cancel() {
     if (this.scanning) this.scanning.cancelled = true;
   }
 
-  async #stopScan() {
+  async stopScan() {
     this.cancel();
     await this.scanDone;
   }
@@ -219,14 +221,14 @@ export class Folder {
   // date are unchanged are kept (with their thumbnails), new files are added, missing ones dropped.
   async rescan() {
     if (!this.ready) return;
-    await this.#stopScan();
+    await this.stopScan();
     const job = { n: 0, cancelled: false, t0: performance.now() };
     this.scanning = job;
-    this.#emit('scan');
+    this.emit('scan');
     this.scanDone = this.#scan(job).finally(() => {
       this.scanning = null;
       this.lastScan = { files: job.n, ms: performance.now() - job.t0, cancelled: job.cancelled };
-      this.#emit('scan');
+      this.emit('scan');
     });
     return this.scanDone;
   }
@@ -239,7 +241,7 @@ export class Folder {
     const drop = []; // ids whose thumbnails go
     let t = performance.now();
     try {
-      for await (const f of this.#walk()) {
+      for await (const f of this.walk()) {
         if (job.cancelled) break;
         job.n++;
         seen.add(f.path);
@@ -257,7 +259,7 @@ export class Folder {
           next.push(n);
         }
         if (performance.now() - t > 12) {
-          this.#emit('scan');
+          this.emit('scan');
           await breathe();
           t = performance.now();
         }
@@ -266,7 +268,7 @@ export class Folder {
       // the folder has gone, or the permission to read it
       console.warn(e);
       this.state = e.name === 'NotFoundError' ? 'missing' : 'denied';
-      this.#emit('state');
+      this.emit('state');
       return;
     }
     // a cancelled scan only adds what it found; it does not know what is missing
@@ -290,13 +292,13 @@ export class Folder {
       if (u) URL.revokeObjectURL(u);
       this.urls.delete(id);
     }
-    this.#setEntries(next);
-    this.#emit('entries');
-    this.#pump();
+    this.setEntries(next);
+    this.emit('entries');
+    this.pump();
   }
 
   // every file of our kinds in the folder and its subfolders: { path, size, mtime }
-  async *#walk() {
+  async *walk() {
     if (this.files) {
       for (const [path, f] of this.files) if (visible(path) && kindOf(path, this.kinds)) yield { path, size: f.size, mtime: f.lastModified };
       return;
@@ -353,7 +355,7 @@ export class Folder {
     e.w = w;
     e.h = h;
     this.save(e);
-    this.#emit('size', e);
+    this.emit('size', e);
   }
 
   // a file that cannot be read or decoded is skipped from now on, and counted
@@ -361,7 +363,7 @@ export class Folder {
     if (e.bad) return;
     e.bad = true;
     this.save(e);
-    this.#emit('bad', e);
+    this.emit('bad', e);
   }
 
   #later() {
@@ -385,7 +387,7 @@ export class Folder {
   // a time, when the page is idle. What the grid shows comes first, then the rest of the index.
   want(list) {
     this.wanted = list;
-    this.#pump();
+    this.pump();
   }
 
   #needs(e) {
@@ -403,7 +405,7 @@ export class Folder {
     return null;
   }
 
-  #pump() {
+  pump() {
     if (!this.ready || !this.kinds.includes('image')) return;
     while (!this.noWorker && this.inflight < THUMBS_AT_ONCE) {
       const e = this.#next('image');
@@ -429,7 +431,7 @@ export class Folder {
     this.inflight--;
     if (r.fatal) this.noWorker = true; // this browser cannot draw in a worker: no picture thumbnails
     else this.#done(e, r);
-    this.#pump();
+    this.pump();
   }
 
   #work(id, file) {
@@ -447,7 +449,7 @@ export class Folder {
     }
     return new Promise((res) => {
       this.jobs.set(id, res);
-      this.worker.postMessage({ id, file });
+      this.worker.postMessage({ id, file, maxHeight: this.thumbHeight });
     });
   }
 
@@ -457,14 +459,19 @@ export class Folder {
     await idle();
     let r;
     try {
-      r = await videoFrame(await this.file(e));
+      r = await this.frame(e);
     } catch (err) {
       r = { error: String(err) };
     }
     this.videoBusy = false;
     this.busy.delete(e.id);
     this.#done(e, r);
-    this.#pump();
+    this.pump();
+  }
+
+  // a video's thumbnail and size (folder-android.js plays the file from its URL instead)
+  async frame(e) {
+    return videoFrame(await this.file(e));
   }
 
   #done(e, r) {
@@ -478,7 +485,7 @@ export class Folder {
     e.thumb = true;
     this.blobs.set(e.id, r.blob);
     this.save(e);
-    this.#emit('thumb', e);
+    this.emit('thumb', e);
   }
 
   // an object URL for an entry's thumbnail (null if it has none yet)
@@ -501,9 +508,10 @@ export class Folder {
   }
 }
 
-// a frame near 1 s into a video, 256 px wide, and the video's size
-async function videoFrame(file) {
-  const url = URL.createObjectURL(file);
+// a frame near 1 s into a video, 256 px wide (and at most maxHeight tall), and the video's size.
+// source: a File, or a URL the video can be played from
+export async function videoFrame(source, maxHeight = Infinity) {
+  const url = typeof source === 'string' ? source : URL.createObjectURL(source);
   const v = document.createElement('video');
   v.muted = true;
   v.preload = 'auto';
@@ -514,8 +522,9 @@ async function videoFrame(file) {
     await event(v, 'seeked');
     if (!v.videoWidth) throw new Error('no picture');
     const c = document.createElement('canvas');
-    c.width = 256;
-    c.height = Math.max(1, Math.round((256 * v.videoHeight) / v.videoWidth));
+    const scale = Math.min(256 / v.videoWidth, maxHeight / v.videoHeight);
+    c.width = Math.max(1, Math.round(scale * v.videoWidth));
+    c.height = Math.max(1, Math.round(scale * v.videoHeight));
     c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
     const blob = await new Promise((r) => c.toBlob(r, 'image/webp', 0.75));
     return { blob, w: v.videoWidth, h: v.videoHeight };

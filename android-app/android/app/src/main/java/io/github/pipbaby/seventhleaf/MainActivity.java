@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        registerPlugin(FoldersPlugin.class);
         super.onCreate(savedInstanceState);
         // the wall is something to look at: the screen stays on while the app is in front
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);

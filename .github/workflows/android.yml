@@ -28,6 +28,7 @@ jobs:
           cache-dependency-path: android-app/package-lock.json
       - uses: gradle/actions/setup-gradle@v5
       - run: npm ci
+      - run: npm test
       - run: node scripts/assemble-web.mjs
       - run: npx cap sync android
       - run: ./gradlew assembleDebug

@@ -361,9 +361,10 @@ export async function makeSource(item, renderer) {
 
 // A folder item's source holds nothing at all until it comes up on the wall. Then the file is
 // read (file() → File), and on release everything goes again: texture, video element, object URL.
-// measured(w, h) hears the real size of a picture once it has been decoded.
-export function folderSource(item, file, measured) {
-  const src = { id: item.id, item, kind: item.kind, url: null, file, measured, xform: new THREE.Vector4(1, 1, 0, 0), texture: null, bg: null };
+// measured(w, h) hears the real size of a picture once it has been decoded. link(), where there is
+// one, gives a URL a video can play from without reading the whole file first (the Android app).
+export function folderSource(item, file, measured, link) {
+  const src = { id: item.id, item, kind: item.kind, url: null, file, measured, link, xform: new THREE.Vector4(1, 1, 0, 0), texture: null, bg: null };
   if (item.w && item.h) src.aspect = item.w / item.h;
   xformFor(item, src.aspect || WALL_ASPECT, src.xform);
   return src;
@@ -411,7 +412,7 @@ export function ensureSource(src, renderer) {
       // read the file only now; a failure is remembered so the item can be skipped
       try {
         if (src.kind === 'video') {
-          src.url = URL.createObjectURL(await src.file());
+          src.url = src.link ? src.link() : URL.createObjectURL(await src.file());
           await openVideo(src);
         } else await loadImage(src, renderer);
       } catch (e) {

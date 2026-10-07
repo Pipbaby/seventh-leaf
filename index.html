@@ -129,13 +129,14 @@
 <template id="folder-ui">
   <p class="hint f-intro"></p>
   <div class="row f-head"><b class="f-name"></b><span class="hint f-count"></span></div>
+  <ul class="f-roots" hidden></ul>
   <div class="row">
     <button class="f-choose"></button>
     <button class="f-reconnect" data-i18n="folder.reconnect">Reconnect folder</button>
     <button class="f-rescan" data-i18n="folder.rescan">Rescan</button>
   </div>
   <p class="hint f-status"></p>
-  <div class="row f-scan"><span class="hint f-progress"></span><button class="f-cancel link" data-i18n="folder.cancel">Cancel</button></div>
+  <div class="row f-scan"><span class="hint f-progress"></span><button class="f-cancel link" data-i18n="folder.cancel">Cancel</button><button class="f-pause link" hidden></button></div>
   <p class="hint f-bad"></p>
   <p class="hint f-note"></p>
   <button class="link f-forget" data-i18n="folder.forget">Forget this folder</button>
