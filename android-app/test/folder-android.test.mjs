@@ -294,3 +294,30 @@ test('a video thumbnail that times out is tried again at the next scan, not coun
   await settle(f);
   assert.ok(f.entries.find((e) => e.name === 'clip').thumb, 'made at the next scan');
 });
+
+test('videos the first build marked unreadable are tried again once', async () => {
+  const f = make();
+  phone.next.push(phone.folders.pic000000002);
+  await f.choose();
+  await settle(f);
+  const clip = f.entries.find((e) => e.name === 'clip');
+  const shot = f.entries.find((e) => e.name === 's 1');
+  f.markBad(clip);
+  f.markBad(shot);
+  await settle(f);
+  store.delete('seventhleaf.retriedVideos.pictures');
+
+  const g = make();
+  await g.load();
+  await settle(g);
+  assert.ok(!g.entries.find((e) => e.name === 'clip').bad, 'the video is tried again');
+  assert.ok(g.entries.find((e) => e.name === 's 1').bad, 'a picture stays unreadable');
+  const h = make();
+  await h.load();
+  assert.equal(h.entries.find((e) => e.name === 'clip').bad, undefined);
+  h.markBad(h.entries.find((e) => e.name === 'clip'));
+  await settle(h);
+  const i = make();
+  await i.load();
+  assert.ok(i.entries.find((e) => e.name === 'clip').bad, 'only once');
+});

@@ -41,8 +41,23 @@ export class AndroidFolder extends Folder {
     if (!rec?.roots?.length) return;
     this.roots = rec.roots.map(({ id, name }) => ({ id, name, state: 'ready' }));
     this.setEntries(await run('entries', 'readonly', (t) => t.objectStore('entries').getAll(IDBKeyRange.bound(this.slot + ':', this.slot + ':￿'))));
+    this.#retryVideos();
     await this.check();
     if (this.ready) this.rescan();
+  }
+
+  // Once: videos that the first build marked unreadable (reading them timed out, or playing them
+  // failed while being read) are tried again. A rescan keeps an unchanged file as it was, so they
+  // would stay skipped otherwise.
+  #retryVideos() {
+    const KEY = 'seventhleaf.retriedVideos.' + this.slot;
+    try {
+      if (localStorage.getItem(KEY)) return;
+      localStorage.setItem(KEY, '1');
+    } catch {
+      return;
+    }
+    for (const e of this.entries) if (e.kind === 'video' && e.bad) (delete e.bad, this.save(e));
   }
 
   // Ask the app which folders can still be read (Android can take the permission back, and a folder
